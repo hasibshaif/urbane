@@ -3,13 +3,11 @@ import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Calendar, Globe, Heart, Plane, TentTree } from 'lucide-react'
-import {
-  onboardingApi,
-  type OnboardingRequest,
-} from '../services/api'
+import { onboardingApi, type OnboardingRequest } from '../services/api'
 import { localProfile, localAuth } from '../services/localStorage'
 
-// Predetermined interest list for matchmaking
+const isDev = import.meta.env.DEV
+
 const INTEREST_OPTIONS = [
   'Hiking',
   'Food & Dining',
@@ -65,12 +63,11 @@ const ACTIVITY_TYPE_OPTIONS = [
 
 const OnboardingPage = () => {
   const navigate = useNavigate()
-  const [error, setError] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentStep, setCurrentStep] = useState(1)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [step, setStep] = useState(1)
   const totalSteps = 3
 
-  // Form state
   const [dateOfBirth, setDateOfBirth] = useState('')
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([])
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
@@ -78,46 +75,32 @@ const OnboardingPage = () => {
   const [preferredActivities, setPreferredActivities] = useState<string[]>([])
   const [bio, setBio] = useState('')
 
-  // Calculate age from date of birth
   const calculateAge = (dob: string): number => {
     if (!dob) return 0
     const today = new Date()
     const birthDate = new Date(dob)
     let age = today.getFullYear() - birthDate.getFullYear()
     const monthDiff = today.getMonth() - birthDate.getMonth()
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--
     }
     return age
   }
 
-  // Get max date (18 years ago for age requirement)
   const getMaxDate = (): string => {
     const date = new Date()
     date.setFullYear(date.getFullYear() - 18)
     return date.toISOString().split('T')[0]
   }
 
-  const toggleSelection = (
-    item: string,
-    selectedItems: string[],
-    setSelectedItems: (items: string[]) => void
-  ) => {
-    if (selectedItems.includes(item)) {
-      setSelectedItems(selectedItems.filter((i) => i !== item))
-    } else {
-      setSelectedItems([...selectedItems, item])
-    }
+  const toggleSelection = (item: string, items: string[], setItems: (items: string[]) => void) => {
+    setItems(items.includes(item) ? items.filter((i) => i !== item) : [...items, item])
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setError('')
 
-    // Validation
     if (!dateOfBirth) {
       setError('Please enter your date of birth')
       return
@@ -144,27 +127,24 @@ const OnboardingPage = () => {
       return
     }
 
-    setIsLoading(true)
+    setLoading(true)
 
-    const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
     const userStr = localStorage.getItem('user')
-    
-    if (!DEV_MODE && !userStr) {
+    if (!isDev && !userStr) {
       setError('User session expired. Please log in again.')
       navigate('/login')
       return
     }
 
-    // Get current user
-    const currentUser = localAuth.getCurrentUser()
-    if (!currentUser && !DEV_MODE) {
+    const user = localAuth.getCurrentUser()
+    if (!user && !isDev) {
       setError('User session expired. Please log in again.')
       navigate('/login')
       return
     }
 
-    const userId = currentUser?.id || (userStr ? JSON.parse(userStr).id : 1)
-    const calculatedAge = calculateAge(dateOfBirth)
+    const userId = user?.id || (userStr ? JSON.parse(userStr).id : 1)
+    const userAge = calculateAge(dateOfBirth)
 
     const onboardingData: OnboardingRequest = {
       userId,
@@ -177,41 +157,33 @@ const OnboardingPage = () => {
     }
 
     try {
-      if (DEV_MODE) {
-        // In dev mode, save to local storage
+      if (isDev) {
         localProfile.saveProfile({
           userId,
           dateOfBirth,
-          age: calculatedAge,
+          age: userAge,
           languages: selectedLanguages,
           interests: selectedInterests,
           travelStyle: travelStyle || undefined,
           preferredActivityTypes: preferredActivities,
           bio: bio.trim() || undefined,
         })
-        console.log('✅ Profile saved to local storage:', onboardingData)
         navigate('/discover')
       } else {
         await onboardingApi.completeOnboarding(onboardingData)
         navigate('/discover')
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to complete onboarding. Please try again.'
-      )
+      setError(err instanceof Error ? err.message : 'Failed to complete onboarding')
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  // Check if user is authenticated (allow dev mode bypass)
   useEffect(() => {
-    const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
     const token = localStorage.getItem('authToken')
     const user = localStorage.getItem('user')
-    if (!DEV_MODE && (!token || !user)) {
+    if (!isDev && (!token || !user)) {
       navigate('/login')
     }
   }, [navigate])
@@ -224,13 +196,13 @@ const OnboardingPage = () => {
       <div className="absolute inset-0">
         <motion.div
           className="absolute -top-32 left-1/3 h-80 w-80 rounded-full bg-sky-400/20 blur-3xl"
-          animate={{ rotate: [0, 15, 0] }}
-          transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ rotate: [0, 10, 0] }}
+          transition={{ duration: 10, repeat: Infinity }}
         />
         <motion.div
           className="absolute bottom-0 right-0 h-[28rem] w-[28rem] rounded-full bg-cyan-500/10 blur-3xl"
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ scale: [1, 1.05, 1] }}
+          transition={{ duration: 8, repeat: Infinity }}
         />
       </div>
 
@@ -238,21 +210,20 @@ const OnboardingPage = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          transition={{ duration: 0.5 }}
           className="w-full max-w-2xl"
         >
-          {/* Progress indicator */}
           <div className="mb-8">
             <div className="mb-2 flex items-center justify-between text-sm text-slate-400">
-              <span>Step {currentStep} of {totalSteps}</span>
-              <span>{Math.round((currentStep / totalSteps) * 100)}%</span>
+              <span>Step {step} of {totalSteps}</span>
+              <span>{Math.round((step / totalSteps) * 100)}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/10">
               <motion.div
                 className="h-full bg-cyan-400"
                 initial={{ width: 0 }}
-                animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
-                transition={{ duration: 0.3 }}
+                animate={{ width: `${(step / totalSteps) * 100}%` }}
+                transition={{ duration: 0.2 }}
               />
             </div>
           </div>
@@ -260,12 +231,8 @@ const OnboardingPage = () => {
           <div className="glow-card relative p-[1px]">
             <div className="relative rounded-[calc(1.5rem-1px)] bg-slate-950/80 p-8">
               <div className="mb-8">
-                <h2 className="font-display text-3xl font-semibold text-white">
-                  Tell us about yourself
-                </h2>
-                <p className="mt-2 text-sm text-slate-300">
-                  Help us match you with like-minded travelers
-                </p>
+                <h2 className="font-display text-3xl font-semibold text-white">Tell us about yourself</h2>
+                <p className="mt-2 text-sm text-slate-300">Help us match you with like-minded travelers</p>
               </div>
 
               {error && (
@@ -279,8 +246,7 @@ const OnboardingPage = () => {
               )}
 
               <form className="space-y-8" onSubmit={handleSubmit}>
-                {/* Step 1: Basic Info */}
-                {currentStep === 1 && (
+                {step === 1 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -288,10 +254,7 @@ const OnboardingPage = () => {
                     className="space-y-6"
                   >
                     <div>
-                      <label
-                        htmlFor="dateOfBirth"
-                        className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200"
-                      >
+                      <label htmlFor="dateOfBirth" className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <Calendar className="h-4 w-4 text-cyan-300" />
                         Date of Birth
                       </label>
@@ -306,23 +269,12 @@ const OnboardingPage = () => {
                           className="w-full border-none bg-transparent text-sm text-slate-100 focus:outline-none"
                         />
                       </div>
-                      {age !== null && age >= 18 && (
-                        <p className="mt-2 text-xs text-cyan-200">
-                          Age: {age} years
-                        </p>
-                      )}
-                      {age !== null && age < 18 && (
-                        <p className="mt-2 text-xs text-red-300">
-                          You must be at least 18 years old
-                        </p>
-                      )}
+                      {age !== null && age >= 18 && <p className="mt-2 text-xs text-cyan-200">Age: {age} years</p>}
+                      {age !== null && age < 18 && <p className="mt-2 text-xs text-red-300">You must be at least 18 years old</p>}
                     </div>
 
                     <div>
-                      <label
-                        htmlFor="languages"
-                        className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200"
-                      >
+                      <label htmlFor="languages" className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <Globe className="h-4 w-4 text-cyan-300" />
                         Languages (select all that apply)
                       </label>
@@ -331,13 +283,7 @@ const OnboardingPage = () => {
                           <motion.button
                             key={language}
                             type="button"
-                            onClick={() =>
-                              toggleSelection(
-                                language,
-                                selectedLanguages,
-                                setSelectedLanguages
-                              )
-                            }
+                            onClick={() => toggleSelection(language, selectedLanguages, setSelectedLanguages)}
                             className={`rounded-lg border px-3 py-2 text-sm transition ${
                               selectedLanguages.includes(language)
                                 ? 'border-cyan-400 bg-cyan-400/20 text-cyan-200'
@@ -354,8 +300,7 @@ const OnboardingPage = () => {
                   </motion.div>
                 )}
 
-                {/* Step 2: Interests & Preferences */}
-                {currentStep === 2 && (
+                {step === 2 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -372,13 +317,7 @@ const OnboardingPage = () => {
                           <motion.button
                             key={interest}
                             type="button"
-                            onClick={() =>
-                              toggleSelection(
-                                interest,
-                                selectedInterests,
-                                setSelectedInterests
-                              )
-                            }
+                            onClick={() => toggleSelection(interest, selectedInterests, setSelectedInterests)}
                             className={`rounded-lg border px-3 py-2 text-sm transition ${
                               selectedInterests.includes(interest)
                                 ? 'border-cyan-400 bg-cyan-400/20 text-cyan-200'
@@ -428,13 +367,7 @@ const OnboardingPage = () => {
                           <motion.button
                             key={activity}
                             type="button"
-                            onClick={() =>
-                              toggleSelection(
-                                activity,
-                                preferredActivities,
-                                setPreferredActivities
-                              )
-                            }
+                            onClick={() => toggleSelection(activity, preferredActivities, setPreferredActivities)}
                             className={`rounded-lg border px-3 py-2 text-xs transition ${
                               preferredActivities.includes(activity)
                                 ? 'border-cyan-400 bg-cyan-400/20 text-cyan-200'
@@ -451,8 +384,7 @@ const OnboardingPage = () => {
                   </motion.div>
                 )}
 
-                {/* Step 3: Bio */}
-                {currentStep === 3 && (
+                {step === 3 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -460,12 +392,7 @@ const OnboardingPage = () => {
                     className="space-y-6"
                   >
                     <div>
-                      <label
-                        htmlFor="bio"
-                        className="mb-2 text-sm font-medium text-slate-200"
-                      >
-                        Bio (optional)
-                      </label>
+                      <label htmlFor="bio" className="mb-2 text-sm font-medium text-slate-200">Bio (optional)</label>
                       <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
                         <textarea
                           id="bio"
@@ -477,28 +404,17 @@ const OnboardingPage = () => {
                           className="w-full resize-none border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
                         />
                       </div>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {bio.length}/500 characters
-                      </p>
+                      <p className="mt-1 text-xs text-slate-400">{bio.length}/500 characters</p>
                     </div>
 
                     <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-300">
-                      <p className="font-medium text-cyan-200">
-                        Review your selections:
-                      </p>
+                      <p className="font-medium text-cyan-200">Review your selections:</p>
                       <ul className="mt-2 space-y-1 text-xs">
                         <li>• Age: {age || 'Not set'}</li>
                         <li>• Languages: {selectedLanguages.length} selected</li>
                         <li>• Interests: {selectedInterests.length} selected</li>
                         {travelStyle && (
-                          <li>
-                            • Travel Style:{' '}
-                            {
-                              TRAVEL_STYLE_OPTIONS.find(
-                                (s) => s.value === travelStyle
-                              )?.label
-                            }
-                          </li>
+                          <li>• Travel Style: {TRAVEL_STYLE_OPTIONS.find((s) => s.value === travelStyle)?.label}</li>
                         )}
                         <li>• Preferred Activity Types: {preferredActivities.length} selected</li>
                       </ul>
@@ -506,25 +422,23 @@ const OnboardingPage = () => {
                   </motion.div>
                 )}
 
-                {/* Navigation buttons */}
                 <div className="flex items-center justify-between gap-4 pt-4">
                   <motion.button
                     type="button"
-                    onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-                    disabled={currentStep === 1}
+                    onClick={() => setStep(Math.max(1, step - 1))}
+                    disabled={step === 1}
                     className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-cyan-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    whileHover={{ scale: currentStep === 1 ? 1 : 1.02 }}
-                    whileTap={{ scale: currentStep === 1 ? 1 : 0.98 }}
+                    whileHover={{ scale: step === 1 ? 1 : 1.02 }}
+                    whileTap={{ scale: step === 1 ? 1 : 0.98 }}
                   >
                     Back
                   </motion.button>
 
-                  {currentStep < totalSteps ? (
+                  {step < totalSteps ? (
                     <motion.button
                       type="button"
                       onClick={() => {
-                        // Validate step 2 before proceeding to step 3
-                        if (currentStep === 2) {
+                        if (step === 2) {
                           if (selectedInterests.length === 0) {
                             setError('Please select at least one interest')
                             return
@@ -539,7 +453,7 @@ const OnboardingPage = () => {
                           }
                           setError('')
                         }
-                        setCurrentStep(Math.min(totalSteps, currentStep + 1))
+                        setStep(Math.min(totalSteps, step + 1))
                       }}
                       className="flex items-center gap-2 rounded-xl bg-cyan-400 px-6 py-2 font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
                       whileHover={{ scale: 1.02 }}
@@ -551,13 +465,13 @@ const OnboardingPage = () => {
                   ) : (
                     <motion.button
                       type="submit"
-                      disabled={isLoading}
+                      disabled={loading}
                       className="flex items-center gap-2 rounded-xl bg-cyan-400 px-6 py-2 font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                      whileHover={{ scale: isLoading ? 1 : 1.02 }}
-                      whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                      whileHover={{ scale: loading ? 1 : 1.02 }}
+                      whileTap={{ scale: loading ? 1 : 0.98 }}
                     >
-                      {isLoading ? 'Completing...' : 'Complete Profile'}
-                      {!isLoading && <ArrowRight className="h-4 w-4" />}
+                      {loading ? 'Completing...' : 'Complete Profile'}
+                      {!loading && <ArrowRight className="h-4 w-4" />}
                     </motion.button>
                   )}
                 </div>

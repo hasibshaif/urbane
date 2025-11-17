@@ -5,25 +5,19 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/OnboardingPage'
 
-// Development mode - set to true to bypass authentication for testing
-const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
+const isDev = import.meta.env.DEV
 
 function App() {
-  // Check if user is already authenticated from localStorage
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('authToken')
-  })
+  const [isAuth, setIsAuth] = useState(() => !!localStorage.getItem('authToken'))
 
-  const handleAuthSuccess = (token: string) => {
-    setIsAuthenticated(true)
+  const onLogin = (token: string) => {
+    setIsAuth(true)
     localStorage.setItem('authToken', token)
   }
 
-  // In dev mode, allow free navigation to all pages
-  // In production, enforce authentication requirements
-  const shouldAllowAccess = (requireAuth: boolean) => {
-    if (DEV_MODE) return true
-    return requireAuth ? isAuthenticated : true
+  const needsAuth = (page: boolean) => {
+    if (isDev) return true
+    return page ? isAuth : true
   }
 
   return (
@@ -31,37 +25,24 @@ function App() {
       <Route
         path="/"
         element={
-          DEV_MODE ? (
-            <Navigate to="/discover" replace />
-          ) : isAuthenticated ? (
-            <Navigate to="/discover" replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
+          <Navigate
+            to={isDev || isAuth ? '/discover' : '/login'}
+            replace
+          />
         }
       />
       <Route
         path="/login"
-        element={
-          <LoginPage
-            onLogin={(token) => handleAuthSuccess(token)}
-            isAuthenticated={isAuthenticated}
-          />
-        }
+        element={<LoginPage onLogin={onLogin} isAuthenticated={isAuth} />}
       />
       <Route
         path="/signup"
-        element={
-          <RegisterPage
-            onSignup={(token) => handleAuthSuccess(token)}
-            isAuthenticated={isAuthenticated}
-          />
-        }
+        element={<RegisterPage onSignup={onLogin} isAuthenticated={isAuth} />}
       />
       <Route
         path="/onboarding"
         element={
-          shouldAllowAccess(true) ? (
+          needsAuth(true) ? (
             <OnboardingPage />
           ) : (
             <Navigate to="/login" replace />
@@ -71,7 +52,7 @@ function App() {
       <Route
         path="/discover"
         element={
-          shouldAllowAccess(true) ? (
+          needsAuth(true) ? (
             <LandingPage />
           ) : (
             <Navigate to="/login" replace />

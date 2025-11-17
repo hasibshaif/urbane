@@ -25,12 +25,9 @@ export const CardContainer = ({
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return
 
-    const { left, top, width, height } =
-      containerRef.current.getBoundingClientRect()
-
-    // More sensitive: smaller divisor = larger rotation
-    const x = (e.clientX - left - width / 2) / 10
-    const y = (e.clientY - top - height / 2) / 10
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left - rect.width / 2) / 10
+    const y = (e.clientY - rect.top - rect.height / 2) / 10
 
     containerRef.current.style.transform = `rotateY(${x}deg) rotateX(${-y}deg)`
   }
