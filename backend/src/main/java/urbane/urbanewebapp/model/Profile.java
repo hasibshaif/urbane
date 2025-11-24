@@ -1,6 +1,8 @@
 package urbane.urbanewebapp.model;
 
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,6 +24,7 @@ public class Profile {
     //primary key and foreign key
     @OneToOne
     @MapsId
+    @JsonBackReference
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
@@ -30,9 +33,14 @@ public class Profile {
     @JoinColumn(name = "location_id")
     private Location location;
 
+    @Column(name = "first_name")
+    private String firstName;
 
-    private Long Age;
-    private String Photo;
+    @Column(name = "last_name")
+    private String lastName;
+
+    private Long age;
+    private String photo;
 
 
 

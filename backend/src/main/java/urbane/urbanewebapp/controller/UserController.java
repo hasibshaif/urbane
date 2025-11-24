@@ -60,8 +60,6 @@ public class UserController {
 
         if (existingUser != null) {
             existingUser.setEmail(user.getEmail());
-            existingUser.setFirstName(user.getFirstName());
-            existingUser.setLastName(user.getLastName());
             existingUser.setPassword(user.getPassword());
             userRepository.save(existingUser);
         } else {
