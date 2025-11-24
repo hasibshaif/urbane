@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Calendar, Globe, Heart, Plane, TentTree } from 'lucide-react'
-import { onboardingApi, type OnboardingRequest } from '../services/api'
+import { profileApi, type ProfileRequest, type ExtendedProfileData } from '../services/api'
 import { localProfile, localAuth } from '../services/localStorage'
 
 const isDev = import.meta.env.DEV
@@ -68,7 +68,10 @@ const OnboardingPage = () => {
   const [step, setStep] = useState(1)
   const totalSteps = 3
 
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [dateOfBirth, setDateOfBirth] = useState('')
+  const [photo, setPhoto] = useState('')
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([])
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [travelStyle, setTravelStyle] = useState('')
@@ -101,6 +104,16 @@ const OnboardingPage = () => {
     e.preventDefault()
     setError('')
 
+    if (!firstName.trim()) {
+      setError('Please enter your first name')
+      return
+    }
+
+    if (!lastName.trim()) {
+      setError('Please enter your last name')
+      return
+    }
+
     if (!dateOfBirth) {
       setError('Please enter your date of birth')
       return
@@ -109,21 +122,6 @@ const OnboardingPage = () => {
     const age = calculateAge(dateOfBirth)
     if (age < 18) {
       setError('You must be at least 18 years old to use this platform')
-      return
-    }
-
-    if (selectedLanguages.length === 0) {
-      setError('Please select at least one language')
-      return
-    }
-
-    if (selectedInterests.length === 0) {
-      setError('Please select at least one interest')
-      return
-    }
-
-    if (preferredActivities.length === 0) {
-      setError('Please select at least one preferred activity type')
       return
     }
 
@@ -146,8 +144,17 @@ const OnboardingPage = () => {
     const userId = user?.id || (userStr ? JSON.parse(userStr).id : 1)
     const userAge = calculateAge(dateOfBirth)
 
-    const onboardingData: OnboardingRequest = {
-      userId,
+    // Prepare profile data for backend (only fields backend supports)
+    const profileData: ProfileRequest = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      age: userAge,
+      photo: photo.trim() || null,
+      location: null, // Can be added later if needed
+    }
+
+    // Store extended profile data in localStorage (for future backend support)
+    const extendedData: ExtendedProfileData = {
       dateOfBirth,
       languages: selectedLanguages,
       interests: selectedInterests,
@@ -170,7 +177,12 @@ const OnboardingPage = () => {
         })
         navigate('/discover')
       } else {
-        await onboardingApi.completeOnboarding(onboardingData)
+        // Save profile to backend
+        await profileApi.saveProfile(userId, profileData)
+        
+        // Store extended data in localStorage for future use
+        localStorage.setItem(`profile_extended_${userId}`, JSON.stringify(extendedData))
+        
         navigate('/discover')
       }
     } catch (err) {
@@ -185,6 +197,26 @@ const OnboardingPage = () => {
     const user = localStorage.getItem('user')
     if (!isDev && (!token || !user)) {
       navigate('/login')
+      return
+    }
+
+    // Load firstName and lastName from registration or user data
+    const pendingFirstName = localStorage.getItem('pendingFirstName')
+    const pendingLastName = localStorage.getItem('pendingLastName')
+    const userData = user ? JSON.parse(user) : null
+
+    if (pendingFirstName) {
+      setFirstName(pendingFirstName)
+      localStorage.removeItem('pendingFirstName')
+    } else if (userData?.firstName) {
+      setFirstName(userData.firstName)
+    }
+
+    if (pendingLastName) {
+      setLastName(pendingLastName)
+      localStorage.removeItem('pendingLastName')
+    } else if (userData?.lastName) {
+      setLastName(userData.lastName)
     }
   }, [navigate])
 
@@ -253,6 +285,41 @@ const OnboardingPage = () => {
                     exit={{ opacity: 0, x: -20 }}
                     className="space-y-6"
                   >
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="firstName" className="mb-2 text-sm font-medium text-slate-200">
+                          First Name
+                        </label>
+                        <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
+                          <input
+                            id="firstName"
+                            type="text"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            required
+                            placeholder="John"
+                            className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label htmlFor="lastName" className="mb-2 text-sm font-medium text-slate-200">
+                          Last Name
+                        </label>
+                        <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
+                          <input
+                            id="lastName"
+                            type="text"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            required
+                            placeholder="Doe"
+                            className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     <div>
                       <label htmlFor="dateOfBirth" className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <Calendar className="h-4 w-4 text-cyan-300" />
@@ -271,6 +338,22 @@ const OnboardingPage = () => {
                       </div>
                       {age !== null && age >= 18 && <p className="mt-2 text-xs text-cyan-200">Age: {age} years</p>}
                       {age !== null && age < 18 && <p className="mt-2 text-xs text-red-300">You must be at least 18 years old</p>}
+                    </div>
+
+                    <div>
+                      <label htmlFor="photo" className="mb-2 text-sm font-medium text-slate-200">
+                        Photo URL (optional)
+                      </label>
+                      <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
+                        <input
+                          id="photo"
+                          type="url"
+                          value={photo}
+                          onChange={(e) => setPhoto(e.target.value)}
+                          placeholder="https://example.com/photo.jpg"
+                          className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -410,13 +493,16 @@ const OnboardingPage = () => {
                     <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-300">
                       <p className="font-medium text-cyan-200">Review your selections:</p>
                       <ul className="mt-2 space-y-1 text-xs">
+                        <li>• Name: {firstName} {lastName}</li>
                         <li>• Age: {age || 'Not set'}</li>
+                        {photo && <li>• Photo: Provided</li>}
                         <li>• Languages: {selectedLanguages.length} selected</li>
                         <li>• Interests: {selectedInterests.length} selected</li>
                         {travelStyle && (
                           <li>• Travel Style: {TRAVEL_STYLE_OPTIONS.find((s) => s.value === travelStyle)?.label}</li>
                         )}
                         <li>• Preferred Activity Types: {preferredActivities.length} selected</li>
+                        {bio && <li>• Bio: {bio.length} characters</li>}
                       </ul>
                     </div>
                   </motion.div>

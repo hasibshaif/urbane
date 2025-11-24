@@ -39,19 +39,20 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
 
     setLoading(true)
 
+    const firstName = formData.get('firstName') as string
+    const lastName = formData.get('lastName') as string
+    const email = formData.get('email') as string
+
     const userData: RegisterRequest = {
-      firstName: formData.get('firstName') as string,
-      lastName: formData.get('lastName') as string,
-      email: formData.get('email') as string,
+      email,
       password,
-      confirmPassword,
     }
 
     try {
       if (isDev) {
         const user = localAuth.register({
-          firstName: userData.firstName,
-          lastName: userData.lastName,
+          firstName,
+          lastName,
           email: userData.email,
           password: userData.password,
         })
@@ -66,13 +67,25 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
         onSignup(token)
         navigate('/onboarding')
       } else {
-        await authApi.register(userData)
+        // Register user (backend only stores email and password)
+        const registerRes = await authApi.register(userData)
+        
+        // Store firstName and lastName in localStorage for onboarding
+        localStorage.setItem('pendingFirstName', firstName)
+        localStorage.setItem('pendingLastName', lastName)
+        
+        // Auto-login after registration
         const loginRes = await authApi.login({
           email: userData.email,
           password: userData.password,
         })
         localStorage.setItem('authToken', loginRes.token)
-        localStorage.setItem('user', JSON.stringify(loginRes.user))
+        localStorage.setItem('user', JSON.stringify({
+          id: loginRes.user.id,
+          email: loginRes.user.email,
+          firstName: firstName, // Use from form
+          lastName: lastName, // Use from form
+        }))
         onSignup(loginRes.token)
         navigate('/onboarding')
       }

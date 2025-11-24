@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { authApi } from '../services/api'
+import { authApi, profileApi } from '../services/api'
 import { localAuth } from '../services/localStorage'
 
 type LoginPageProps = {
@@ -51,7 +51,15 @@ const LoginPage = ({ onLogin, isAuthenticated }: LoginPageProps) => {
         localStorage.setItem('authToken', res.token)
         localStorage.setItem('user', JSON.stringify(res.user))
         onLogin(res.token)
-        navigate('/discover')
+        
+        // Check if user has a profile, if not redirect to onboarding
+        try {
+          await profileApi.fetchProfile(res.user.id)
+          navigate('/discover')
+        } catch {
+          // Profile doesn't exist, go to onboarding
+          navigate('/onboarding')
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
