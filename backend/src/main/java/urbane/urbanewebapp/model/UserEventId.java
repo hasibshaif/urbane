@@ -1,0 +1,42 @@
+package urbane.urbanewebapp.model;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
+import java.io.Serializable;
+import java.util.Objects;
+
+
+@Embeddable
+public class UserEventId implements Serializable {
+
+
+    //composite key
+    @Column(name = "user_id")
+    private Long userId;
+    @Column(name = "event_id")
+    private Long eventId;
+
+    public UserEventId() {
+    }
+
+    public UserEventId(Long userId, Long eventId) {
+        this.userId = userId;
+        this.eventId = eventId;
+
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof UserEventId that)) return false;
+        return Objects.equals(userId, that.userId) && Objects.equals(eventId, that.eventId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(userId, eventId);
+    }
+
+
+}
