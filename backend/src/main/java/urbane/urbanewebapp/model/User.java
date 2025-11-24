@@ -1,5 +1,6 @@
 package urbane.urbanewebapp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -7,6 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -25,6 +29,10 @@ public class User {
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private Profile profile;
 
+    @OneToMany(mappedBy = "user",  cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<UserEvent> events = new ArrayList<>();
+
     @Column(name = "first_name")
     private String firstName;
 
@@ -40,6 +48,8 @@ public class User {
     @NotBlank
     @Column(unique = true, nullable = false, length = 20)
     private String password;
+
+
 
 
 
