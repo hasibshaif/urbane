@@ -1,6 +1,7 @@
 package urbane.urbanewebapp.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -27,17 +28,13 @@ public class User {
 
     //holder of the primary key (is also a foreign key as the same id maps to a profile)
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
+    @JsonManagedReference
     private Profile profile;
 
     @OneToMany(mappedBy = "user",  cascade = CascadeType.ALL)
     @JsonIgnore
     private List<UserEvent> events = new ArrayList<>();
 
-    @Column(name = "first_name")
-    private String firstName;
-
-    @Column(name = "last_name")
-    private String lastName;
 
     @Email
     @NotBlank
