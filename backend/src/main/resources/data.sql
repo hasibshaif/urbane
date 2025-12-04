@@ -1,0 +1,17 @@
+INSERT INTO interests (name) VALUES
+                                 ('Hiking'),
+                                 ('Food & Dining'),
+                                 ('Beach & Water Sports'),
+                                 ('Nightlife'),
+                                 ('Museums & Culture'),
+                                 ('Photography'),
+                                 ('Music & Concerts'),
+                                 ('Adventure Sports'),
+                                 ('Shopping'),
+                                 ('Nature & Wildlife'),
+                                 ('Local Events'),
+                                 ('Cooking Classes'),
+                                 ('Historical Sites'),
+                                 ('Festivals'),
+                                 ('Wellness & Yoga'),
+                                 ('Art & Galleries');
