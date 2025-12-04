@@ -26,15 +26,23 @@ public class User {
     @Column(name = "user_id")
     private Long id;
 
-    //holder of the primary key (is also a foreign key as the same id maps to a profile)
+    //FK to profile table
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     @JsonManagedReference
     private Profile profile;
 
+    //FK to user Event (manytomany join table)
     @OneToMany(mappedBy = "user",  cascade = CascadeType.ALL)
     @JsonIgnore
     private List<UserEvent> events = new ArrayList<>();
 
+    @ManyToMany
+    @JoinTable(
+            name = "user_interests",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "interest_id")
+    )
+    private List<Interest> interests = new ArrayList<>();
 
     @Email
     @NotBlank
@@ -45,9 +53,6 @@ public class User {
     @NotBlank
     @Column(unique = true, nullable = false, length = 20)
     private String password;
-
-
-
 
 
 }

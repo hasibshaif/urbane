@@ -33,7 +33,9 @@ public class Event {
 
     private Long capacity;
     private String date;
-    private String location;
+
+    private String state;
+    private String city;
     private String latitude;
     private String longitude;
 
