@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,10 +32,15 @@ public class Event {
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
     private List<UserEvent> userEvents = new ArrayList<>();
 
+
     private Long capacity;
+
+
+
     private String date;
 
     private String state;
+    private String country;
     private String city;
     private String latitude;
     private String longitude;

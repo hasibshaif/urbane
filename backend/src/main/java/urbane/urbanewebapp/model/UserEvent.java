@@ -29,7 +29,7 @@ public class UserEvent {
     private User user;
 
     @Column(name = "rsvp_status")
-    private String rsvpStatus;
+    private boolean rsvpStatus;
 
 
 
