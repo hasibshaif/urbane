@@ -62,11 +62,7 @@ public class UserEventController {
         userEventDTO.setUserId(savedUserEvent.getUser().getId());
         userEventDTO.setEventId(savedUserEvent.getEvent().getId());
         userEventDTO.setRsvpStatus(savedUserEvent.isRsvpStatus());
-        userEventDTO.setTitle(savedUserEvent.getEvent().getTitle());
-        userEventDTO.setDescription(savedUserEvent.getEvent().getDescription());
-        userEventDTO.setCity(savedUserEvent.getEvent().getCity());
-        userEventDTO.setState(savedUserEvent.getEvent().getState());
-        userEventDTO.setCountry(savedUserEvent.getEvent().getCountry());
+
 
         return ResponseEntity.ok(userEventDTO);
     }
