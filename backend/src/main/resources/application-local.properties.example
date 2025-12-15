@@ -1,0 +1,13 @@
+# Local Development Configuration Example
+# Copy this file to application-local.properties and customize for your local setup
+# Or use environment variables (recommended)
+
+# Database Configuration
+spring.datasource.url=jdbc:postgresql://localhost:5432/urbane
+spring.datasource.username=your_username_here
+spring.datasource.password=your_password_here
+
+# Optional: Override other settings for local development
+spring.jpa.show-sql=true
+spring.jpa.hibernate.ddl-auto=create
+

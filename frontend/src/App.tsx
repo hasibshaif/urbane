@@ -4,8 +4,7 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/OnboardingPage'
-
-const isDev = import.meta.env.DEV
+import HomePage from './pages/HomePage'
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => !!localStorage.getItem('authToken'))
@@ -16,20 +15,28 @@ function App() {
   }
 
   const needsAuth = (page: boolean) => {
-    if (isDev) return true
     return page ? isAuth : true
+  }
+
+  // Check if user has completed onboarding (has profile)
+  const hasProfile = () => {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) return false
+    try {
+      const user = JSON.parse(userStr)
+      // Check if profile extended data exists (indicates onboarding completed)
+      const profileExtended = localStorage.getItem(`profile_extended_${user.id}`)
+      return !!profileExtended
+    } catch {
+      return false
+    }
   }
 
   return (
     <Routes>
       <Route
         path="/"
-        element={
-          <Navigate
-            to={isDev || isAuth ? '/discover' : '/login'}
-            replace
-          />
-        }
+        element={<LandingPage />}
       />
       <Route
         path="/login"
@@ -50,10 +57,24 @@ function App() {
         }
       />
       <Route
+        path="/home"
+        element={
+          needsAuth(true) ? (
+            <HomePage />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
         path="/discover"
         element={
           needsAuth(true) ? (
-            <LandingPage />
+            hasProfile() ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <Navigate to="/onboarding" replace />
+            )
           ) : (
             <Navigate to="/login" replace />
           )
@@ -61,7 +82,8 @@ function App() {
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-  )
+
+)
 }
 
 export default App

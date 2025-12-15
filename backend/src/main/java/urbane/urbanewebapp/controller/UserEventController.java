@@ -12,6 +12,7 @@ import urbane.urbanewebapp.model.Event;
 import urbane.urbanewebapp.model.Profile;
 import urbane.urbanewebapp.model.User;
 import urbane.urbanewebapp.model.UserEvent;
+import urbane.urbanewebapp.model.UserEventId;
 import urbane.urbanewebapp.repository.EventRepository;
 import urbane.urbanewebapp.repository.UserEventRepository;
 import urbane.urbanewebapp.repository.UserRepository;
@@ -40,8 +41,16 @@ public class UserEventController {
 
     @PostMapping("/JoinUserEvent")
     public ResponseEntity<UserEventDTO> joinUserEvent(@RequestBody JoinUserEventRequestDTO request) {
-        User user = userRepository.findById(request.getUserId()).orElseThrow();
-        Event event = eventRepository.findById(request.getEventId()).orElseThrow();
+        try {
+            User user = userRepository.findById(request.getUserId()).orElse(null);
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+            
+            Event event = eventRepository.findById(request.getEventId()).orElse(null);
+            if (event == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
 
 
         long count = userEventRepository.countByRsvpStatusTrueAndEventId(event.getId());
@@ -50,8 +59,15 @@ public class UserEventController {
             return  ResponseEntity.badRequest().build();
         }
 
+        // Check if user already joined this event
+        UserEventId userEventId = new UserEventId(user.getId(), event.getId());
+        if (userEventRepository.existsById(userEventId)) {
+            return ResponseEntity.badRequest().build(); // User already joined
+        }
+
         // join event if not at capacity
         UserEvent userEvent = new UserEvent();
+        userEvent.setId(userEventId);
         userEvent.setUser(user);
         userEvent.setEvent(event);
         userEvent.setRsvpStatus(true);
@@ -65,6 +81,11 @@ public class UserEventController {
 
 
         return ResponseEntity.ok(userEventDTO);
+        } catch (Exception e) {
+            System.err.println("Error joining event: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @GetMapping("/getAllUsersAttending/{event_id}")

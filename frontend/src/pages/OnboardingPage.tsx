@@ -3,10 +3,7 @@ import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Calendar, Globe, Heart, Plane, TentTree } from 'lucide-react'
-import { profileApi, type ProfileRequest, type ExtendedProfileData } from '../services/api'
-import { localProfile, localAuth } from '../services/localStorage'
-
-const isDev = import.meta.env.DEV
+import { profileApi, interestApi, type ProfileRequest, type ExtendedProfileData } from '../services/api'
 
 const INTEREST_OPTIONS = [
   'Hiking',
@@ -102,8 +99,10 @@ const OnboardingPage = () => {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    e.stopPropagation()
     setError('')
 
+    // Final validation before submission
     if (!firstName.trim()) {
       setError('Please enter your first name')
       return
@@ -125,23 +124,52 @@ const OnboardingPage = () => {
       return
     }
 
+    if (selectedLanguages.length === 0) {
+      setError('Please select at least one language')
+      return
+    }
+
+    if (selectedInterests.length === 0) {
+      setError('Please select at least one interest')
+      return
+    }
+
+    if (!travelStyle) {
+      setError('Please select a travel style')
+      return
+    }
+
+    if (preferredActivities.length === 0) {
+      setError('Please select at least one preferred activity type')
+      return
+    }
+
     setLoading(true)
 
     const userStr = localStorage.getItem('user')
-    if (!isDev && !userStr) {
+    if (!userStr) {
       setError('User session expired. Please log in again.')
+      setLoading(false)
       navigate('/login')
       return
     }
 
-    const user = localAuth.getCurrentUser()
-    if (!user && !isDev) {
-      setError('User session expired. Please log in again.')
+    let userId: number
+    try {
+      const userData = JSON.parse(userStr)
+      if (!userData.id || typeof userData.id !== 'number') {
+        setError('Invalid user session. Please log in again.')
+        setLoading(false)
+        navigate('/login')
+        return
+      }
+      userId = userData.id
+    } catch {
+      setError('Invalid user session. Please log in again.')
+      setLoading(false)
       navigate('/login')
       return
     }
-
-    const userId = user?.id || (userStr ? JSON.parse(userStr).id : 1)
     const userAge = calculateAge(dateOfBirth)
 
     // Prepare profile data for backend (only fields backend supports)
@@ -164,30 +192,40 @@ const OnboardingPage = () => {
     }
 
     try {
-      if (isDev) {
-        localProfile.saveProfile({
-          userId,
-          dateOfBirth,
-          age: userAge,
-          languages: selectedLanguages,
-          interests: selectedInterests,
-          travelStyle: travelStyle || undefined,
-          preferredActivityTypes: preferredActivities,
-          bio: bio.trim() || undefined,
-        })
-        navigate('/discover')
-      } else {
-        // Save profile to backend
-        await profileApi.saveProfile(userId, profileData)
-        
-        // Store extended data in localStorage for future use
-        localStorage.setItem(`profile_extended_${userId}`, JSON.stringify(extendedData))
-        
-        navigate('/discover')
+      console.log('Saving profile for user:', userId, profileData)
+      
+      // Save profile to backend
+      const savedProfile = await profileApi.saveProfile(userId, profileData)
+      console.log('Profile saved:', savedProfile)
+      
+      // Save interests to backend
+      if (selectedInterests.length > 0) {
+        try {
+          console.log('Saving interests:', selectedInterests)
+          await interestApi.addInterestsToUser(userId, selectedInterests)
+          console.log('Interests saved successfully')
+        } catch (interestErr) {
+          console.error('Failed to save interests:', interestErr)
+          // Continue even if interests fail to save
+        }
       }
+      
+      // Store extended data in localStorage for future use
+      localStorage.setItem(`profile_extended_${userId}`, JSON.stringify(extendedData))
+      
+      // Update user object in localStorage with profile info
+      if (userStr) {
+        const userData = JSON.parse(userStr)
+        userData.firstName = firstName.trim()
+        userData.lastName = lastName.trim()
+        localStorage.setItem('user', JSON.stringify(userData))
+      }
+      
+      console.log('Navigating to /home')
+      navigate('/home', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete onboarding')
-    } finally {
+      console.error('Error saving profile:', err)
+      setError(err instanceof Error ? err.message : 'Failed to complete onboarding. Please try again.')
       setLoading(false)
     }
   }
@@ -195,9 +233,28 @@ const OnboardingPage = () => {
   useEffect(() => {
     const token = localStorage.getItem('authToken')
     const user = localStorage.getItem('user')
-    if (!isDev && (!token || !user)) {
+    if (!token || !user) {
       navigate('/login')
       return
+    }
+
+    // Check if profile already exists in backend - if so, redirect to home
+    if (user) {
+      const checkProfile = async () => {
+        try {
+          const userData = JSON.parse(user)
+          const profile = await profileApi.fetchProfile(userData.id)
+          // If profile exists with required fields, user already completed onboarding
+          if (profile.firstName && profile.lastName) {
+            navigate('/home', { replace: true })
+            return
+          }
+        } catch {
+          // Profile doesn't exist, continue with onboarding
+          console.log('Profile not found, continuing with onboarding')
+        }
+      }
+      checkProfile()
     }
 
     // Load firstName and lastName from registration or user data
@@ -221,6 +278,7 @@ const OnboardingPage = () => {
   }, [navigate])
 
   const age = dateOfBirth ? calculateAge(dateOfBirth) : null
+
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -277,7 +335,12 @@ const OnboardingPage = () => {
                 </motion.div>
               )}
 
-              <form className="space-y-8" onSubmit={handleSubmit}>
+              <form className="space-y-8" onSubmit={async (e) => {
+                e.preventDefault()
+                if (step === totalSteps) {
+                  await handleSubmit(e)
+                }
+              }}>
                 {step === 1 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
@@ -359,7 +422,7 @@ const OnboardingPage = () => {
                     <div>
                       <label htmlFor="languages" className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <Globe className="h-4 w-4 text-cyan-300" />
-                        Languages (select all that apply)
+                        Languages (select at least one)
                       </label>
                       <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {LANGUAGE_OPTIONS.map((language) => (
@@ -379,6 +442,9 @@ const OnboardingPage = () => {
                           </motion.button>
                         ))}
                       </div>
+                      {step === 1 && selectedLanguages.length === 0 && (
+                        <p className="mt-2 text-xs text-slate-400">Please select at least one language</p>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -393,7 +459,7 @@ const OnboardingPage = () => {
                     <div>
                       <label className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <Heart className="h-4 w-4 text-cyan-300" />
-                        Interests (select all that interest you)
+                        Interests (select at least one)
                       </label>
                       <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {INTEREST_OPTIONS.map((interest) => (
@@ -443,7 +509,7 @@ const OnboardingPage = () => {
                     <div>
                       <label className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
                         <TentTree className="h-4 w-4 text-cyan-300" />
-                        Preferred Activity Types
+                        Preferred Activity Types (select at least one)
                       </label>
                       <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {ACTIVITY_TYPE_OPTIONS.map((activity) => (
@@ -523,7 +589,37 @@ const OnboardingPage = () => {
                   {step < totalSteps ? (
                     <motion.button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setError('')
+                        
+                        // Validate step 1 before moving to step 2
+                        if (step === 1) {
+                          if (!firstName.trim()) {
+                            setError('Please enter your first name')
+                            return
+                          }
+                          if (!lastName.trim()) {
+                            setError('Please enter your last name')
+                            return
+                          }
+                          if (!dateOfBirth) {
+                            setError('Please enter your date of birth')
+                            return
+                          }
+                          const age = calculateAge(dateOfBirth)
+                          if (age < 18) {
+                            setError('You must be at least 18 years old to use this platform')
+                            return
+                          }
+                          if (selectedLanguages.length === 0) {
+                            setError('Please select at least one language')
+                            return
+                          }
+                        }
+                        
+                        // Validate step 2 before moving to step 3
                         if (step === 2) {
                           if (selectedInterests.length === 0) {
                             setError('Please select at least one interest')
@@ -537,8 +633,8 @@ const OnboardingPage = () => {
                             setError('Please select at least one preferred activity type')
                             return
                           }
-                          setError('')
                         }
+                        
                         setStep(Math.min(totalSteps, step + 1))
                       }}
                       className="flex items-center gap-2 rounded-xl bg-cyan-400 px-6 py-2 font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"

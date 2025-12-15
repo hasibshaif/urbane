@@ -4,14 +4,11 @@ import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { authApi, profileApi } from '../services/api'
-import { localAuth } from '../services/localStorage'
 
 type LoginPageProps = {
   onLogin: (token: string) => void
   isAuthenticated: boolean
 }
-
-const isDev = import.meta.env.DEV
 
 const LoginPage = ({ onLogin, isAuthenticated }: LoginPageProps) => {
   const navigate = useNavigate()
@@ -19,9 +16,8 @@ const LoginPage = ({ onLogin, isAuthenticated }: LoginPageProps) => {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated && !isDev) {
-      navigate('/discover', { replace: true })
-    }
+    // Don't auto-redirect on login page - let the login handler manage navigation
+    // This prevents conflicts with the login flow
   }, [isAuthenticated, navigate])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -34,32 +30,38 @@ const LoginPage = ({ onLogin, isAuthenticated }: LoginPageProps) => {
     const password = formData.get('password') as string
 
     try {
-      if (isDev) {
-        const user = localAuth.login(email, password)
-        const token = `local-token-${user.id}`
-        localStorage.setItem('authToken', token)
-        localStorage.setItem('user', JSON.stringify({
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        }))
-        onLogin(token)
-        navigate('/discover')
-      } else {
-        const res = await authApi.login({ email, password })
-        localStorage.setItem('authToken', res.token)
-        localStorage.setItem('user', JSON.stringify(res.user))
-        onLogin(res.token)
-        
-        // Check if user has a profile, if not redirect to onboarding
-        try {
-          await profileApi.fetchProfile(res.user.id)
-          navigate('/discover')
-        } catch {
-          // Profile doesn't exist, go to onboarding
-          navigate('/onboarding')
+      // Always use backend for login (even in dev mode)
+      console.log('Attempting login with backend for:', email)
+      const res = await authApi.login({ email, password })
+      console.log('Login successful, user ID:', res.user.id)
+      
+      localStorage.setItem('authToken', res.token)
+      localStorage.setItem('user', JSON.stringify(res.user))
+      onLogin(res.token)
+      
+      // Check if user has a profile in the backend
+      try {
+        const profile = await profileApi.fetchProfile(res.user.id)
+        console.log('Profile found:', profile)
+        // Profile exists, check if it has required fields (indicates onboarding completed)
+        if (profile.firstName && profile.lastName) {
+          // Store extended profile data check
+          const profileExtended = localStorage.getItem(`profile_extended_${res.user.id}`)
+          if (!profileExtended) {
+            // Profile exists but extended data not in localStorage, set a flag
+            localStorage.setItem(`profile_extended_${res.user.id}`, JSON.stringify({ completed: true }))
+          }
+          console.log('Profile complete, navigating to /home')
+          navigate('/home', { replace: true })
+        } else {
+          // Profile exists but incomplete, go to onboarding
+          console.log('Profile incomplete, redirecting to onboarding')
+          navigate('/onboarding', { replace: true })
         }
+      } catch (profileErr) {
+        // Profile doesn't exist, go to onboarding
+        console.log('Profile not found, redirecting to onboarding:', profileErr)
+        navigate('/onboarding', { replace: true })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

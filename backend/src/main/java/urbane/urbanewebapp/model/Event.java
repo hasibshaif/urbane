@@ -1,5 +1,7 @@
 package urbane.urbanewebapp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -30,8 +32,13 @@ public class Event {
 
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<UserEvent> userEvents = new ArrayList<>();
 
+    // Event creator/owner
+    @ManyToOne
+    @JoinColumn(name = "creator_id")
+    private User creator;
 
     private Long capacity;
 

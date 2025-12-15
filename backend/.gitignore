@@ -32,6 +32,11 @@ build/
 ### VS Code ###
 .vscode/
 
+### Local Configuration Files ###
+application-local.properties
+application-dev.properties
+.env
+.env.local
 
 markdowns
 TESTING_GUIDE.md

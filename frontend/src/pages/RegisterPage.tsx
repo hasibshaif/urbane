@@ -4,14 +4,11 @@ import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { authApi, type RegisterRequest } from '../services/api'
-import { localAuth } from '../services/localStorage'
 
 type RegisterPageProps = {
   onSignup: (token: string) => void
   isAuthenticated: boolean
 }
-
-const isDev = import.meta.env.DEV
 
 const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
   const navigate = useNavigate()
@@ -19,9 +16,8 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated && !isDev) {
-      navigate('/discover', { replace: true })
-    }
+    // Don't auto-redirect on register page - let the registration handler manage navigation
+    // This prevents conflicts with the registration flow
   }, [isAuthenticated, navigate])
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -49,46 +45,47 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
     }
 
     try {
-      if (isDev) {
-        const user = localAuth.register({
-          firstName,
-          lastName,
-          email: userData.email,
-          password: userData.password,
-        })
-        const token = `local-token-${user.id}`
-        localStorage.setItem('authToken', token)
-        localStorage.setItem('user', JSON.stringify({
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        }))
-        onSignup(token)
-        navigate('/onboarding')
-      } else {
-        // Register user (backend only stores email and password)
-        const registerRes = await authApi.register(userData)
-        
-        // Store firstName and lastName in localStorage for onboarding
-        localStorage.setItem('pendingFirstName', firstName)
-        localStorage.setItem('pendingLastName', lastName)
-        
-        // Auto-login after registration
-        const loginRes = await authApi.login({
-          email: userData.email,
-          password: userData.password,
-        })
-        localStorage.setItem('authToken', loginRes.token)
-        localStorage.setItem('user', JSON.stringify({
-          id: loginRes.user.id,
-          email: loginRes.user.email,
-          firstName: firstName, // Use from form
-          lastName: lastName, // Use from form
-        }))
-        onSignup(loginRes.token)
-        navigate('/onboarding')
+      // Always use backend for registration (even in dev mode)
+      console.log('Registering user with backend:', userData.email)
+      
+      // Register user (backend only stores email and password)
+      const registerRes = await authApi.register(userData)
+      console.log('Registration response:', registerRes)
+      
+      // Store firstName and lastName in localStorage for onboarding
+      localStorage.setItem('pendingFirstName', firstName)
+      localStorage.setItem('pendingLastName', lastName)
+      
+      // Auto-login after registration
+      console.log('Logging in user:', userData.email)
+      const loginRes = await authApi.login({
+        email: userData.email,
+        password: userData.password,
+      })
+      console.log('Login response:', loginRes)
+      
+      // Validate user ID is a number, not a timestamp
+      if (!loginRes.user.id || typeof loginRes.user.id !== 'number') {
+        console.error('Invalid user ID from login:', loginRes.user.id, typeof loginRes.user.id)
+        throw new Error('Invalid user ID received. Please try logging in again.')
       }
+      
+      // Ensure user ID is reasonable (not a timestamp - should be < 1000000 for auto-increment IDs)
+      if (loginRes.user.id > 1000000) {
+        console.error('User ID looks like a timestamp:', loginRes.user.id)
+        throw new Error('Invalid user ID format. Please try registering again.')
+      }
+      
+      console.log('Registration and login successful, user ID:', loginRes.user.id)
+      localStorage.setItem('authToken', loginRes.token)
+      localStorage.setItem('user', JSON.stringify({
+        id: loginRes.user.id,
+        email: loginRes.user.email,
+        firstName: firstName, // Use from form
+        lastName: lastName, // Use from form
+      }))
+      onSignup(loginRes.token)
+      navigate('/onboarding')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
@@ -146,13 +143,13 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
                   <div>
                     <label htmlFor="firstName" className="text-sm font-medium text-slate-200">First name</label>
                     <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
-                      <input id="firstName" name="firstName" required placeholder="Amina" className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none" />
+                      <input id="firstName" name="firstName" required placeholder="John" className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none" />
                     </div>
                   </div>
                   <div>
                     <label htmlFor="lastName" className="text-sm font-medium text-slate-200">Last name</label>
                     <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 focus-within:border-cyan-300">
-                      <input id="lastName" name="lastName" required placeholder="Garcia" className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none" />
+                      <input id="lastName" name="lastName" required placeholder="Doe" className="w-full border-none bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none" />
                     </div>
                   </div>
                 </div>

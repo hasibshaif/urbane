@@ -17,14 +17,24 @@ public class UserController {
 
     @PostMapping("/addUser")
     public ResponseEntity<User> addUser(@RequestBody User user) {
-
-        //check if email exists. if user already exists throw an error
-
-        if (userRepository.existsByEmail(user.getEmail())) {
-            return ResponseEntity.badRequest().build(); //return 400 if user email already exists
+        try {
+            //check if email exists. if user already exists throw an error
+            if (userRepository.existsByEmail(user.getEmail())) {
+                return ResponseEntity.badRequest().build(); //return 400 if user email already exists
+            }
+            
+            // Ensure password is not null
+            if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+                return ResponseEntity.badRequest().build();
+            }
+            
+            User savedUser = userRepository.save(user);
+            return ResponseEntity.ok(savedUser);
+        } catch (Exception e) {
+            System.err.println("Error adding user: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.ok(userRepository.save(user)); //return 200 and save the user being added
-
     }
     //get user by id if they exist
     @GetMapping("/fetchUserById/{id}")

@@ -120,21 +120,59 @@ export const authApi = {
   // Login: fetch user by email, then verify password client-side
   // Note: In production, this should be done server-side with proper authentication
   login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-    const response = await fetch(`${API_BASE_URL}/fetchUserByEmail/${encodeURIComponent(credentials.email)}`, {
+    console.log('Logging in user:', credentials.email)
+    const encodedEmail = encodeURIComponent(credentials.email)
+    const url = `${API_BASE_URL}/fetchUserByEmail/${encodedEmail}`
+    console.log('Login URL:', url)
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     })
 
+    console.log('Login response status:', response.status, response.statusText)
+
     if (!response.ok) {
+      if (response.status === 404) {
+        console.error('User not found with email:', credentials.email)
+        throw new Error('No account found with this email address')
+      }
+      const errorText = await response.text()
+      console.error('Login error response:', errorText)
       throw new Error('Invalid email or password')
     }
 
     const user: BackendUser = await response.json()
+    console.log('User fetched from backend:', { 
+      id: user.id, 
+      email: user.email,
+      hasPassword: !!user.password,
+      passwordLength: user.password?.length 
+    })
+
+    // Validate user ID
+    if (!user.id || typeof user.id !== 'number') {
+      console.error('Invalid user ID from backend:', user.id, typeof user.id)
+      throw new Error('Invalid user data received from server')
+    }
+    
+    // Validate user ID is reasonable (not a timestamp)
+    if (user.id > 1000000) {
+      console.error('User ID looks like a timestamp:', user.id)
+      throw new Error('Invalid user ID format received from server')
+    }
 
     // Verify password (client-side check - in production, backend should handle this)
+    console.log('Comparing passwords:', {
+      provided: credentials.password,
+      stored: user.password,
+      match: user.password === credentials.password
+    })
+    
     if (user.password !== credentials.password) {
+      console.error('Password mismatch for user:', user.email)
       throw new Error('Invalid email or password')
     }
 
@@ -145,6 +183,7 @@ export const authApi = {
     const firstName = user.profile?.firstName || ''
     const lastName = user.profile?.lastName || ''
 
+    console.log('Login successful, returning user ID:', user.id)
     return {
       token,
       user: {
@@ -158,6 +197,7 @@ export const authApi = {
 
   // Register: create new user with email and password
   register: async (userData: RegisterRequest): Promise<RegisterResponse> => {
+    console.log('Calling /addUser with:', { email: userData.email, password: '***' })
     const response = await fetch(`${API_BASE_URL}/addUser`, {
       method: 'POST',
       headers: {
@@ -169,14 +209,30 @@ export const authApi = {
       }),
     })
 
+    console.log('Registration response status:', response.status, response.statusText)
+
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Registration error:', response.status, errorText)
       if (response.status === 400) {
         throw new Error('Email already registered')
       }
-      throw new Error('Registration failed')
+      throw new Error(`Registration failed: ${response.status} ${errorText}`)
     }
 
     const user: BackendUser = await response.json()
+    console.log('User registered successfully:', user)
+    if (!user.id || typeof user.id !== 'number') {
+      console.error('Invalid user ID type:', typeof user.id, user.id)
+      throw new Error('Invalid user ID received from server')
+    }
+    
+    // Validate user ID is reasonable (not a timestamp)
+    if (user.id > 1000000) {
+      console.error('User ID looks like a timestamp:', user.id)
+      throw new Error('Invalid user ID format received from server')
+    }
+    
     return {
       id: user.id,
       email: user.email,
@@ -240,6 +296,225 @@ export const getAuthHeaders = (): Record<string, string> => {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
   }
+}
+
+// Backend Event model
+export interface BackendEvent {
+  id: number
+  title: string
+  description?: string | null
+  capacity?: number | null
+  date?: string | null
+  state?: string | null
+  country?: string | null
+  city?: string | null
+  latitude?: string | null
+  longitude?: string | null
+  creator?: {
+    id: number
+    email: string
+    profile?: BackendProfile | null
+  } | null
+}
+
+// Backend Interest model
+export interface BackendInterest {
+  id: number
+  name: string
+}
+
+// Event creation request
+export interface CreateEventRequest {
+  title: string
+  description?: string | null
+  capacity?: number | null
+  date?: string | null
+  state?: string | null
+  country?: string | null
+  city?: string | null
+  latitude?: string | null
+  longitude?: string | null
+  creatorId?: number | null
+}
+
+// Join event request
+export interface JoinEventRequest {
+  userId: number
+  eventId: number
+  rsvpStatus: boolean
+}
+
+// Event API functions
+export const eventApi = {
+  // Create a new event
+  createEvent: async (eventData: CreateEventRequest): Promise<BackendEvent> => {
+    const response = await fetch(`${API_BASE_URL}/saveEvent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventData),
+    })
+    return handleResponse<BackendEvent>(response)
+  },
+
+  // Get event by ID
+  getEventById: async (eventId: number): Promise<BackendEvent> => {
+    const response = await fetch(`${API_BASE_URL}/getEventById/${eventId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<BackendEvent>(response)
+  },
+
+  // Get all events
+  getAllEvents: async (): Promise<BackendEvent[]> => {
+    const response = await fetch(`${API_BASE_URL}/getAllEvents`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<BackendEvent[]>(response)
+  },
+
+  // Get events by state
+  getEventsByState: async (state: string): Promise<BackendEvent[]> => {
+    const response = await fetch(`${API_BASE_URL}/getEventByState/${encodeURIComponent(state)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    if (response.status === 404) {
+      return []
+    }
+    return handleResponse<BackendEvent[]>(response)
+  },
+
+  // Get events by state and city
+  getEventsByStateCity: async (state: string, city: string): Promise<BackendEvent[]> => {
+    const response = await fetch(
+      `${API_BASE_URL}/getEventByStateCity/${encodeURIComponent(state)}/${encodeURIComponent(city)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+    if (response.status === 404) {
+      return []
+    }
+    return handleResponse<BackendEvent[]>(response)
+  },
+
+  // Update event
+  updateEvent: async (eventId: number, eventData: Partial<CreateEventRequest>): Promise<BackendEvent> => {
+    const response = await fetch(`${API_BASE_URL}/updateEvent/${eventId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventData),
+    })
+    return handleResponse<BackendEvent>(response)
+  },
+
+  // Delete event
+  deleteEvent: async (eventId: number): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/deleteEvent/${eventId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    if (!response.ok) {
+      throw new Error('Failed to delete event')
+    }
+  },
+
+  // Join an event
+  joinEvent: async (userId: number, eventId: number): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/JoinUserEvent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        eventId,
+        rsvpStatus: true,
+      }),
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Join event error:', response.status, errorText)
+      if (response.status === 400) {
+        // Try to parse error message
+        try {
+          const error = JSON.parse(errorText)
+          throw new Error(error.message || 'Event is at full capacity or you already joined')
+        } catch {
+          throw new Error('Event is at full capacity or you already joined this event')
+        }
+      }
+      throw new Error(`Failed to join event: ${response.status} ${errorText}`)
+    }
+  },
+
+  // Get attendees count for an event
+  getAttendeesCount: async (eventId: number): Promise<number> => {
+    const response = await fetch(`${API_BASE_URL}/getAttendees/${eventId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<number>(response)
+  },
+
+  // Get all users attending an event
+  getEventAttendees: async (eventId: number): Promise<BackendProfile[]> => {
+    const response = await fetch(`${API_BASE_URL}/getAllUsersAttending/${eventId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    if (response.status === 404) {
+      return [] // Return empty array if no attendees found
+    }
+    return handleResponse<BackendProfile[]>(response)
+  },
+}
+
+// Interest API functions
+export const interestApi = {
+  // Get all available interests
+  getAllInterests: async (): Promise<BackendInterest[]> => {
+    const response = await fetch(`${API_BASE_URL}/getAllInterests`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<BackendInterest[]>(response)
+  },
+
+  // Add interests to a user
+  addInterestsToUser: async (userId: number, interestNames: string[]): Promise<BackendUser> => {
+    const response = await fetch(`${API_BASE_URL}/addInterestsToUser/${userId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(interestNames),
+    })
+    return handleResponse<BackendUser>(response)
+  },
 }
 
 // Generic API request helper for future endpoints
