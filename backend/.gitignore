@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+
+markdowns
+TESTING_GUIDE.md
+QUICK_START.md
+HELP.md
