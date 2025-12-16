@@ -18,6 +18,7 @@ export interface BackendProfile {
   lastName?: string | null
   age?: number | null
   photo?: string | null
+  phoneNumber?: string | null
   location?: BackendLocation | null
 }
 

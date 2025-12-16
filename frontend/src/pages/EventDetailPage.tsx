@@ -242,7 +242,7 @@ const EventDetailPage = () => {
                           {attendee.photo ? (
                             <img
                               src={attendee.photo}
-                              alt={attendee.firstName}
+                              alt={attendee.firstName || undefined}
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
@@ -293,7 +293,7 @@ const EventDetailPage = () => {
                 {selectedAttendee.photo ? (
                   <img
                     src={selectedAttendee.photo}
-                    alt={selectedAttendee.firstName}
+                    alt={selectedAttendee.firstName || undefined}
                     className="w-24 h-24 rounded-full object-cover mb-4"
                   />
                 ) : (
