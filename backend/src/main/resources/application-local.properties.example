@@ -11,3 +11,10 @@ spring.datasource.password=your_password_here
 spring.jpa.show-sql=true
 spring.jpa.hibernate.ddl-auto=create
 
+# Cognito Configuration (Required)
+# Get these values from your AWS Cognito User Pool (see COGNITO_SETUP.md)
+# You can also set these as environment variables: COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_REGION
+cognito.userPoolId=us-east-1_XXXXXXXXX
+cognito.clientId=your-client-id-here
+cognito.region=us-east-1
+

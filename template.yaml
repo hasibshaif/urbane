@@ -11,6 +11,42 @@ Globals:
       - x86_64
 
 Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-user-pool"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      VerificationMessageTemplate:
+        EmailSubject: "Your verification code"
+        EmailMessage: "Your verification code is {####}"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-user-pool-client"
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+
   ExpressHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -32,6 +68,23 @@ Resources:
       CodeUri: backend/
       Handler: lambda.handler    # lambda.js exports.handler
       Description: Express app behind HTTP API
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminUpdateUserAttributes
+                - cognito-idp:AdminInitiateAuth
+                - cognito-idp:AdminRespondToAuthChallenge
+                - cognito-idp:ConfirmSignUp
+                - cognito-idp:ResendConfirmationCode
+              Resource: !GetAtt CognitoUserPool.Arn
       Events:
         Root:
           Type: HttpApi
@@ -76,6 +129,9 @@ Resources:
                 - ''
                 - - !GetAtt StaticWebsiteBucket.Arn
                   - '/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
 
   CloudFrontOAC:
     Type: AWS::CloudFront::OriginAccessControl
@@ -99,8 +155,8 @@ Resources:
         Origins:
           - Id: S3Origin
             DomainName: !GetAtt StaticWebsiteBucket.RegionalDomainName
+            S3OriginConfig: {}     # required for S3 origins
             OriginAccessControlId: !Ref CloudFrontOAC
-            S3OriginConfig: {}
 
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
@@ -111,16 +167,6 @@ Resources:
           # https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad         
           OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # AWS managed CORS-S3Origin
-
-        CustomErrorResponses:
-          - ErrorCode: 403
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
-          - ErrorCode: 404
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
 
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
@@ -138,3 +184,12 @@ Outputs:
   BucketName:
     Description: Name of the static site bucket
     Value: !Ref StaticWebsiteBucket
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref CognitoUserPoolClient
+  CognitoRegion:
+    Description: AWS Region for Cognito
+    Value: !Ref AWS::Region

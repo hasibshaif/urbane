@@ -49,9 +49,12 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
+    // Cognito user ID (sub claim from JWT token)
+    @Column(unique = true, nullable = true)
+    private String cognitoSub;
 
-    @NotBlank
-    @Column(nullable = false)
+    // Password is deprecated - kept for migration purposes only
+    @Column(nullable = true)
     private String password;
 
 

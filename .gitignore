@@ -1,7 +1,41 @@
-
+# Documentation
 TESTING_GUIDE.md
 QUICK_START.md
-HELP.md
+COGNITO_SETUP.md
 
-
+# Scripts
 test-connection.sh
+
+# Sensitive Configuration Files
+# (Handled by backend/.gitignore and frontend/.gitignore)
+
+# AWS Credentials
+.aws/
+*.pem
+*.key
+credentials
+config
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+target/
+dist/
+node_modules/
+.aws-sam/
+*.jar
+*.war
+*.class
+
+# Logs
+*.log
+logs/

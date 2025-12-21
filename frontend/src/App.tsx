@@ -3,6 +3,7 @@ import { useState } from 'react'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import VerificationPage from './pages/VerificationPage'
 import OnboardingPage from './pages/OnboardingPage'
 import HomePage from './pages/HomePage'
 
@@ -45,6 +46,10 @@ function App() {
       <Route
         path="/signup"
         element={<RegisterPage onSignup={onLogin} isAuthenticated={isAuth} />}
+      />
+      <Route
+        path="/verify"
+        element={<VerificationPage />}
       />
       <Route
         path="/onboarding"

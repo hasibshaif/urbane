@@ -30,16 +30,15 @@ const LoginPage = ({ onLogin, isAuthenticated }: LoginPageProps) => {
     const password = formData.get('password') as string
 
     try {
-      // Always use backend for login (even in dev mode)
-      console.log('Attempting login with backend for:', email)
+      // Authenticate with Cognito via backend
+      console.log('Attempting login with Cognito for:', email)
       const res = await authApi.login({ email, password })
       console.log('Login successful, user ID:', res.user.id)
       
-      localStorage.setItem('authToken', res.token)
-      localStorage.setItem('user', JSON.stringify(res.user))
+      // Tokens are already stored in authApi.login
       onLogin(res.token)
       
-      // Check if user has a profile in the backend
+      // Check if user has a profile in the backend (indicates onboarding completed)
       try {
         const profile = await profileApi.fetchProfile(res.user.id)
         console.log('Profile found:', profile)

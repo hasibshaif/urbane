@@ -45,47 +45,18 @@ const RegisterPage = ({ onSignup, isAuthenticated }: RegisterPageProps) => {
     }
 
     try {
-      // Always use backend for registration (even in dev mode)
-      console.log('Registering user with backend:', userData.email)
+      // Register user with Cognito via backend
+      console.log('Registering user with Cognito:', userData.email)
       
-      // Register user (backend only stores email and password)
       const registerRes = await authApi.register(userData)
       console.log('Registration response:', registerRes)
       
-      // Store firstName and lastName in localStorage for onboarding
+      // Store firstName and lastName in localStorage for onboarding (after verification)
       localStorage.setItem('pendingFirstName', firstName)
       localStorage.setItem('pendingLastName', lastName)
       
-      // Auto-login after registration
-      console.log('Logging in user:', userData.email)
-      const loginRes = await authApi.login({
-        email: userData.email,
-        password: userData.password,
-      })
-      console.log('Login response:', loginRes)
-      
-      // Validate user ID is a number, not a timestamp
-      if (!loginRes.user.id || typeof loginRes.user.id !== 'number') {
-        console.error('Invalid user ID from login:', loginRes.user.id, typeof loginRes.user.id)
-        throw new Error('Invalid user ID received. Please try logging in again.')
-      }
-      
-      // Ensure user ID is reasonable (not a timestamp - should be < 1000000 for auto-increment IDs)
-      if (loginRes.user.id > 1000000) {
-        console.error('User ID looks like a timestamp:', loginRes.user.id)
-        throw new Error('Invalid user ID format. Please try registering again.')
-      }
-      
-      console.log('Registration and login successful, user ID:', loginRes.user.id)
-      localStorage.setItem('authToken', loginRes.token)
-      localStorage.setItem('user', JSON.stringify({
-        id: loginRes.user.id,
-        email: loginRes.user.email,
-        firstName: firstName, // Use from form
-        lastName: lastName, // Use from form
-      }))
-      onSignup(loginRes.token)
-      navigate('/onboarding')
+      // Redirect to verification page
+      navigate(`/verify?email=${encodeURIComponent(userData.email)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {

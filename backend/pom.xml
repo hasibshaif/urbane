@@ -93,6 +93,27 @@
             <artifactId>spring-cloud-function-web</artifactId>
         </dependency>
 
+        <!-- AWS SDK for Cognito -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>2.20.26</version>
+        </dependency>
+
+        <!-- JWT Library for token validation -->
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>4.2.1</version>
+        </dependency>
+
+        <!-- AWS SDK Regions -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>regions</artifactId>
+            <version>2.20.26</version>
+        </dependency>
+
 
 	</dependencies>
     <dependencyManagement>

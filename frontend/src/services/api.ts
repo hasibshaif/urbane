@@ -18,7 +18,6 @@ export interface BackendProfile {
   lastName?: string | null
   age?: number | null
   photo?: string | null
-  phoneNumber?: string | null
   location?: BackendLocation | null
 }
 
@@ -118,88 +117,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 // Auth API functions
 export const authApi = {
-  // Login: fetch user by email, then verify password client-side
-  // Note: In production, this should be done server-side with proper authentication
-  login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-    console.log('Logging in user:', credentials.email)
-    const encodedEmail = encodeURIComponent(credentials.email)
-    const url = `${API_BASE_URL}/fetchUserByEmail/${encodedEmail}`
-    console.log('Login URL:', url)
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-
-    console.log('Login response status:', response.status, response.statusText)
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.error('User not found with email:', credentials.email)
-        throw new Error('No account found with this email address')
-      }
-      const errorText = await response.text()
-      console.error('Login error response:', errorText)
-      throw new Error('Invalid email or password')
-    }
-
-    const user: BackendUser = await response.json()
-    console.log('User fetched from backend:', { 
-      id: user.id, 
-      email: user.email,
-      hasPassword: !!user.password,
-      passwordLength: user.password?.length 
-    })
-
-    // Validate user ID
-    if (!user.id || typeof user.id !== 'number') {
-      console.error('Invalid user ID from backend:', user.id, typeof user.id)
-      throw new Error('Invalid user data received from server')
-    }
-    
-    // Validate user ID is reasonable (not a timestamp)
-    if (user.id > 1000000) {
-      console.error('User ID looks like a timestamp:', user.id)
-      throw new Error('Invalid user ID format received from server')
-    }
-
-    // Verify password (client-side check - in production, backend should handle this)
-    console.log('Comparing passwords:', {
-      provided: credentials.password,
-      stored: user.password,
-      match: user.password === credentials.password
-    })
-    
-    if (user.password !== credentials.password) {
-      console.error('Password mismatch for user:', user.email)
-      throw new Error('Invalid email or password')
-    }
-
-    // Generate a simple token (in production, backend should provide JWT)
-    const token = `token-${user.id}-${Date.now()}`
-
-    // Extract profile info if available
-    const firstName = user.profile?.firstName || ''
-    const lastName = user.profile?.lastName || ''
-
-    console.log('Login successful, returning user ID:', user.id)
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName,
-        lastName,
-      },
-    }
-  },
-
-  // Register: create new user with email and password
-  register: async (userData: RegisterRequest): Promise<RegisterResponse> => {
-    console.log('Calling /addUser with:', { email: userData.email, password: '***' })
-    const response = await fetch(`${API_BASE_URL}/addUser`, {
+  // Register: create new user with Cognito
+  register: async (userData: RegisterRequest): Promise<{ email: string; message: string }> => {
+    console.log('Registering user with Cognito:', userData.email)
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -213,35 +134,114 @@ export const authApi = {
     console.log('Registration response status:', response.status, response.statusText)
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Registration error:', response.status, errorText)
-      if (response.status === 400) {
+      const errorData = await response.json().catch(() => ({ error: 'Registration failed' }))
+      console.error('Registration error:', response.status, errorData)
+      if (response.status === 409 || errorData.error?.includes('already')) {
         throw new Error('Email already registered')
       }
-      throw new Error(`Registration failed: ${response.status} ${errorText}`)
+      throw new Error(errorData.error || `Registration failed: ${response.status}`)
     }
 
-    const user: BackendUser = await response.json()
-    console.log('User registered successfully:', user)
-    if (!user.id || typeof user.id !== 'number') {
-      console.error('Invalid user ID type:', typeof user.id, user.id)
-      throw new Error('Invalid user ID received from server')
-    }
-    
-    // Validate user ID is reasonable (not a timestamp)
-    if (user.id > 1000000) {
-      console.error('User ID looks like a timestamp:', user.id)
-      throw new Error('Invalid user ID format received from server')
-    }
+    const result = await response.json()
+    console.log('User registered successfully:', result)
     
     return {
+      email: result.email,
+      message: result.message,
+    }
+  },
+
+  // Confirm email verification code
+  confirm: async (email: string, confirmationCode: string): Promise<void> => {
+    console.log('Confirming email for:', email)
+    const response = await fetch(`${API_BASE_URL}/auth/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        confirmationCode,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Verification failed' }))
+      throw new Error(errorData.error || 'Invalid verification code')
+    }
+  },
+
+  // Resend confirmation code
+  resendCode: async (email: string): Promise<void> => {
+    console.log('Resending code to:', email)
+    const response = await fetch(`${API_BASE_URL}/auth/resend-code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Failed to resend code' }))
+      throw new Error(errorData.error || 'Failed to resend verification code')
+    }
+  },
+
+  // Login: authenticate with Cognito
+  login: async (credentials: LoginRequest): Promise<LoginResponse> => {
+    console.log('Logging in user:', credentials.email)
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: credentials.email,
+        password: credentials.password,
+      }),
+    })
+
+    console.log('Login response status:', response.status, response.statusText)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Login failed' }))
+      console.error('Login error response:', errorData)
+      throw new Error(errorData.error || 'Invalid email or password')
+    }
+
+    const authResult = await response.json()
+    console.log('Login successful:', { userId: authResult.user?.id, email: authResult.user?.email })
+
+    // Store tokens
+    localStorage.setItem('authToken', authResult.accessToken)
+    localStorage.setItem('idToken', authResult.idToken)
+    if (authResult.refreshToken) {
+      localStorage.setItem('refreshToken', authResult.refreshToken)
+    }
+
+    // Store user info
+    const user = authResult.user
+    localStorage.setItem('user', JSON.stringify({
       id: user.id,
       email: user.email,
+    }))
+
+    return {
+      token: authResult.accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+      },
     }
   },
 
   logout: async (): Promise<void> => {
     localStorage.removeItem('authToken')
+    localStorage.removeItem('idToken')
+    localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
   },
 }
@@ -290,9 +290,9 @@ export const profileApi = {
   },
 }
 
-// Helper to get auth token for authenticated requests (for future use)
+// Helper to get auth token for authenticated requests
 export const getAuthHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem('authToken')
+  const token = localStorage.getItem('authToken') // Cognito access token
   return {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
