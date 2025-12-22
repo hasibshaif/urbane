@@ -12,8 +12,11 @@ import urbane.urbanewebapp.repository.EventRepository;
 import urbane.urbanewebapp.repository.UserRepository;
 
 import javax.swing.plaf.nimbus.State;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class EventController {
@@ -26,14 +29,71 @@ public class EventController {
 
     // Get all events
     @GetMapping("/getAllEvents")
-    public ResponseEntity<List<Event>> getAllEvents() {
+    public ResponseEntity<List<Map<String, Object>>> getAllEvents() {
         List<Event> allEvents = eventRepository.findAll();
-        return ResponseEntity.ok(allEvents);
+        List<Map<String, Object>> eventsData = new ArrayList<>();
+        
+        for (Event event : allEvents) {
+            Map<String, Object> eventData = buildEventMap(event);
+            eventsData.add(eventData);
+        }
+        
+        return ResponseEntity.ok(eventsData);
+    }
+    
+    // Helper method to build event map without circular references
+    private Map<String, Object> buildEventMap(Event event) {
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("id", event.getId());
+        eventData.put("title", event.getTitle());
+        eventData.put("description", event.getDescription());
+        eventData.put("capacity", event.getCapacity());
+        eventData.put("date", event.getDate());
+        eventData.put("state", event.getState());
+        eventData.put("country", event.getCountry());
+        eventData.put("city", event.getCity());
+        eventData.put("latitude", event.getLatitude());
+        eventData.put("longitude", event.getLongitude());
+        
+        // Build creator data without circular references
+        if (event.getCreator() != null) {
+            Map<String, Object> creatorData = new HashMap<>();
+            creatorData.put("id", event.getCreator().getId());
+            creatorData.put("email", event.getCreator().getEmail());
+            
+            // Build profile data if it exists
+            if (event.getCreator().getProfile() != null) {
+                Map<String, Object> profileData = new HashMap<>();
+                profileData.put("id", event.getCreator().getProfile().getId());
+                profileData.put("firstName", event.getCreator().getProfile().getFirstName());
+                profileData.put("lastName", event.getCreator().getProfile().getLastName());
+                profileData.put("age", event.getCreator().getProfile().getAge());
+                profileData.put("photo", event.getCreator().getProfile().getPhoto());
+                profileData.put("bio", event.getCreator().getProfile().getBio());
+                profileData.put("travelStyle", event.getCreator().getProfile().getTravelStyle());
+                profileData.put("languages", event.getCreator().getProfile().getLanguages());
+                if (event.getCreator().getProfile().getLocation() != null) {
+                    Map<String, Object> locationData = new HashMap<>();
+                    locationData.put("id", event.getCreator().getProfile().getLocation().getId());
+                    locationData.put("city", event.getCreator().getProfile().getLocation().getCity());
+                    locationData.put("state", event.getCreator().getProfile().getLocation().getState());
+                    locationData.put("country", event.getCreator().getProfile().getLocation().getCountry());
+                    locationData.put("latitude", event.getCreator().getProfile().getLocation().getLatitude());
+                    locationData.put("longitude", event.getCreator().getProfile().getLocation().getLongitude());
+                    profileData.put("location", locationData);
+                }
+                creatorData.put("profile", profileData);
+            }
+            
+            eventData.put("creator", creatorData);
+        }
+        
+        return eventData;
     }
 
     //save the event
     @PostMapping("/saveEvent")
-    public ResponseEntity<Event> saveEvent(@RequestBody CreateEventRequestDTO request) {
+    public ResponseEntity<Map<String, Object>> saveEvent(@RequestBody CreateEventRequestDTO request) {
         try {
             // Validate title length (max 25 characters)
             if (request.getTitle() != null && request.getTitle().length() > 25) {
@@ -64,7 +124,8 @@ public class EventController {
             }
             
             Event savedEvent = eventRepository.save(event);
-            return ResponseEntity.ok(savedEvent);
+            Map<String, Object> eventData = buildEventMap(savedEvent);
+            return ResponseEntity.ok(eventData);
         } catch (Exception e) {
             // Log the error for debugging
             System.err.println("Error saving event: " + e.getMessage());
@@ -74,31 +135,38 @@ public class EventController {
     }
 
     @GetMapping("/getEventByState/{state}")
-    public ResponseEntity<List<Event>> getEventByState(@PathVariable String state) {
-        List<Event> savedEvents  = eventRepository.findEventsByState(state);
-
-        // Return empty list instead of 404 when no events found
-        return ResponseEntity.ok(savedEvents);
+    public ResponseEntity<List<Map<String, Object>>> getEventByState(@PathVariable String state) {
+        List<Event> savedEvents = eventRepository.findEventsByState(state);
+        List<Map<String, Object>> eventsData = new ArrayList<>();
+        
+        for (Event event : savedEvents) {
+            eventsData.add(buildEventMap(event));
+        }
+        
+        return ResponseEntity.ok(eventsData);
     }
+    
     //get event by city and state
     @GetMapping("/getEventByStateCity/{state}/{city}")
-    public ResponseEntity<List<Event>> getEventByStateCity(@PathVariable String state, @PathVariable String city) {
-        List<Event> existingEvents  = eventRepository.findEventsByStateAndCity(state, city);
-
-        // Return empty list instead of 404 when no events found
-        return ResponseEntity.ok(existingEvents);
-
+    public ResponseEntity<List<Map<String, Object>>> getEventByStateCity(@PathVariable String state, @PathVariable String city) {
+        List<Event> existingEvents = eventRepository.findEventsByStateAndCity(state, city);
+        List<Map<String, Object>> eventsData = new ArrayList<>();
+        
+        for (Event event : existingEvents) {
+            eventsData.add(buildEventMap(event));
+        }
+        
+        return ResponseEntity.ok(eventsData);
     }
 
     //fetch event by id
     @GetMapping("/getEventById/{id}")
-    public ResponseEntity<Event> getEventById(@PathVariable Long id) {
-        Event existingEvents = eventRepository.findById(id).orElse(null);
-        if (existingEvents == null) {
+    public ResponseEntity<Map<String, Object>> getEventById(@PathVariable Long id) {
+        Event existingEvent = eventRepository.findById(id).orElse(null);
+        if (existingEvent == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(existingEvents);
-
+        return ResponseEntity.ok(buildEventMap(existingEvent));
     }
 
     //update event

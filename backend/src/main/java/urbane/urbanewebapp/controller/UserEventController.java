@@ -17,7 +17,9 @@ import urbane.urbanewebapp.repository.EventRepository;
 import urbane.urbanewebapp.repository.UserEventRepository;
 import urbane.urbanewebapp.repository.UserRepository;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -55,8 +57,9 @@ public class UserEventController {
 
         long count = userEventRepository.countByRsvpStatusTrueAndEventId(event.getId());
 
-        if (count >= event.getCapacity()){
-            return  ResponseEntity.badRequest().build();
+        // Check capacity only if it's set (not null/unlimited)
+        if (event.getCapacity() != null && count >= event.getCapacity()) {
+            return ResponseEntity.badRequest().build();
         }
 
         // Check if user already joined this event
@@ -89,19 +92,40 @@ public class UserEventController {
     }
 
     @GetMapping("/getAllUsersAttending/{event_id}")
-    public ResponseEntity<List<Profile>> getAllUsersAttending(@PathVariable("event_id") long eventId) {
+    public ResponseEntity<List<Map<String, Object>>> getAllUsersAttending(@PathVariable("event_id") long eventId) {
 
         Event event  = eventRepository.findById(eventId).orElseThrow();
         List<UserEvent> attendees = userEventRepository.findByEventIdAndRsvpStatusTrue(eventId);
 
-        List<Profile> profiles = attendees.stream().
-                map(userEvent -> userEvent.getUser().getProfile())
+        // Build profile data without circular references
+        List<Map<String, Object>> profiles = attendees.stream()
+                .filter(userEvent -> userEvent.getUser().getProfile() != null)
+                .map(userEvent -> {
+                    Profile profile = userEvent.getUser().getProfile();
+                    Map<String, Object> profileMap = new HashMap<>();
+                    profileMap.put("id", profile.getId());
+                    profileMap.put("firstName", profile.getFirstName());
+                    profileMap.put("lastName", profile.getLastName());
+                    profileMap.put("age", profile.getAge());
+                    profileMap.put("photo", profile.getPhoto());
+                    profileMap.put("bio", profile.getBio());
+                    profileMap.put("travelStyle", profile.getTravelStyle());
+                    profileMap.put("languages", profile.getLanguages());
+                    if (profile.getLocation() != null) {
+                        Map<String, Object> locationData = new HashMap<>();
+                        locationData.put("id", profile.getLocation().getId());
+                        locationData.put("city", profile.getLocation().getCity());
+                        locationData.put("state", profile.getLocation().getState());
+                        locationData.put("country", profile.getLocation().getCountry());
+                        locationData.put("latitude", profile.getLocation().getLatitude());
+                        locationData.put("longitude", profile.getLocation().getLongitude());
+                        profileMap.put("location", locationData);
+                    }
+                    return profileMap;
+                })
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(profiles);
-
-
-        //fetch all users attending an event check if rsvp status == true and return there profile entity
     }
 
     @GetMapping("/getAllEventsAttending{user_id}")

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye, Heart, XCircle, Sparkles, Settings } from 'lucide-react'
-import { eventApi, authApi, matchmakingApi, type BackendEvent, type CreateEventRequest, type BackendProfile, type PotentialMatch } from '../services/api'
+import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye, Heart, XCircle, Sparkles, Settings, Globe, Plane } from 'lucide-react'
+import { eventApi, authApi, matchmakingApi, interestApi, type BackendEvent, type CreateEventRequest, type BackendProfile, type PotentialMatch, type BackendInterest, type UserProfile } from '../services/api'
 
 interface EventWithAttendees extends BackendEvent {
   attendeeCount?: number
@@ -22,6 +22,8 @@ const HomePage = () => {
   const [eventAttendees, setEventAttendees] = useState<BackendProfile[]>([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
   const [selectedProfile, setSelectedProfile] = useState<BackendProfile | null>(null)
+  const [selectedProfileInterests, setSelectedProfileInterests] = useState<BackendInterest[]>([])
+  const [loadingProfileDetails, setLoadingProfileDetails] = useState(false)
   
   // Matchmaking state
   const [potentialMatches, setPotentialMatches] = useState<PotentialMatch[]>([])
@@ -158,6 +160,14 @@ const HomePage = () => {
       return
     }
 
+    // Check if event is at capacity
+    if (event?.capacity && event.attendeeCount !== undefined) {
+      if (event.attendeeCount >= event.capacity) {
+        alert('This event is at full capacity. No more attendees can join.')
+        return
+      }
+    }
+
     try {
       console.log('Joining event:', eventId, 'for user:', user.id)
       await eventApi.joinEvent(user.id, eventId)
@@ -169,7 +179,12 @@ const HomePage = () => {
       }
     } catch (err) {
       console.error('Error joining event:', err)
-      alert(err instanceof Error ? err.message : 'Failed to join event')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to join event'
+      if (errorMessage.includes('400') || errorMessage.includes('Bad Request')) {
+        alert('Unable to join event. It may be at full capacity or you may have already joined.')
+      } else {
+        alert(errorMessage)
+      }
     }
   }
 
@@ -195,6 +210,25 @@ const HomePage = () => {
     setSelectedEvent(null)
     setEventAttendees([])
     setSelectedProfile(null)
+    setSelectedProfileInterests([])
+  }
+
+  const handleViewProfile = async (profile: BackendProfile) => {
+    setSelectedProfile(profile)
+    setLoadingProfileDetails(true)
+    setSelectedProfileInterests([])
+    
+    try {
+      // Profile ID equals User ID (one-to-one relationship)
+      const userId = profile.id
+      const userProfile = await matchmakingApi.getUserProfile(userId)
+      setSelectedProfileInterests(userProfile.interests)
+    } catch (err) {
+      console.error('Failed to load profile details:', err)
+      // Still show the profile, just without interests
+    } finally {
+      setLoadingProfileDetails(false)
+    }
   }
 
   const handleLogout = async () => {
@@ -805,7 +839,7 @@ const HomePage = () => {
             <div>
               <div className="mb-8">
                 <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">
-                  Nearby Events
+                  Events
                 </h2>
                 <p className="mt-2 text-slate-300">Discover and join events happening around you</p>
               </div>
@@ -823,8 +857,18 @@ const HomePage = () => {
                   <p className="text-slate-400">No events found. Be the first to create one!</p>
                 </div>
               ) : (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {events.map((event) => (
+                <div className="space-y-12">
+                  {/* My Events Section */}
+                  {events.filter(e => e.creator?.id === user?.id).length > 0 && (
+                    <div>
+                      <h3 className="font-display text-2xl font-semibold text-white mb-6 flex items-center gap-2">
+                        <Users className="h-6 w-6 text-cyan-400" />
+                        My Events
+                      </h3>
+                      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {events
+                          .filter(event => event.creator?.id === user?.id)
+                          .map((event) => (
                     <motion.div
                       key={event.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -884,6 +928,10 @@ const HomePage = () => {
                             <span className="flex-1 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-center text-sm text-cyan-200">
                               Your Event
                             </span>
+                          ) : event.capacity && event.attendeeCount !== undefined && event.attendeeCount >= event.capacity ? (
+                            <span className="flex-1 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-center text-sm text-red-200">
+                              Full
+                            </span>
                           ) : (
                             <motion.button
                               onClick={() => handleJoinEvent(event.id)}
@@ -897,7 +945,110 @@ const HomePage = () => {
                         </div>
                       </div>
                     </motion.div>
-                  ))}
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Other Events Section */}
+                  {events.filter(e => e.creator?.id !== user?.id).length > 0 && (
+                    <div>
+                      <h3 className="font-display text-2xl font-semibold text-white mb-6 flex items-center gap-2">
+                        <Calendar className="h-6 w-6 text-cyan-400" />
+                        {events.filter(e => e.creator?.id === user?.id).length > 0 ? 'Other Events' : 'All Events'}
+                      </h3>
+                      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {events
+                          .filter(event => event.creator?.id !== user?.id)
+                          .map((event) => (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="glow-card relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 p-6"
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-display text-xl font-semibold text-white">{event.title}</h3>
+                          {event.description && (
+                            <p className="mt-2 text-sm text-slate-300 line-clamp-2">{event.description}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 text-sm text-slate-400">
+                          {event.creator && (
+                            <div className="text-xs text-cyan-200">
+                              Created by: {event.creator.profile?.firstName || event.creator.email}
+                            </div>
+                          )}
+                          {event.city && event.state && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-cyan-300" />
+                              <span>{event.city}, {event.state}</span>
+                            </div>
+                          )}
+                          {event.date && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-cyan-300" />
+                              <span>{formatDate(event.date)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-cyan-300" />
+                            <span>
+                              {event.attendeeCount !== undefined && (
+                                <>{event.attendeeCount} {event.capacity ? `/${event.capacity}` : ''} attending</>
+                              )}
+                              {event.attendeeCount === undefined && (
+                                <>{event.capacity ? `Up to ${event.capacity} people` : 'Unlimited capacity'}</>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <motion.button
+                            onClick={() => handleViewEventDetails(event)}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-cyan-300 hover:bg-white/10 hover:text-white"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Details
+                          </motion.button>
+                          {event.creator?.id === user?.id ? (
+                            <span className="flex-1 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-center text-sm text-cyan-200">
+                              Your Event
+                            </span>
+                          ) : event.capacity && event.attendeeCount !== undefined && event.attendeeCount >= event.capacity ? (
+                            <span className="flex-1 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-center text-sm text-red-200">
+                              Full
+                            </span>
+                          ) : (
+                            <motion.button
+                              onClick={() => handleJoinEvent(event.id)}
+                              className="flex-1 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              Join Event
+                            </motion.button>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No events message if both sections are empty */}
+                  {events.filter(e => e.creator?.id === user?.id).length === 0 && 
+                   events.filter(e => e.creator?.id !== user?.id).length === 0 && (
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-12 text-center">
+                      <p className="text-slate-400">No events found. Be the first to create one!</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -935,9 +1086,18 @@ const HomePage = () => {
                       <UserIcon className="h-5 w-5 text-cyan-300" />
                       <span>
                         <span className="text-slate-400">Created by:</span>{' '}
-                        {selectedEvent.creator.profile?.firstName && selectedEvent.creator.profile?.lastName
-                          ? `${selectedEvent.creator.profile.firstName} ${selectedEvent.creator.profile.lastName}`
-                          : selectedEvent.creator.email}
+                        <button
+                          onClick={() => {
+                            if (selectedEvent.creator?.profile) {
+                              handleViewProfile(selectedEvent.creator.profile)
+                            }
+                          }}
+                          className="text-cyan-300 hover:text-cyan-200 hover:underline transition"
+                        >
+                          {selectedEvent.creator.profile?.firstName && selectedEvent.creator.profile?.lastName
+                            ? `${selectedEvent.creator.profile.firstName} ${selectedEvent.creator.profile.lastName}`
+                            : selectedEvent.creator.email}
+                        </button>
                       </span>
                     </div>
                   )}
@@ -976,7 +1136,8 @@ const HomePage = () => {
                   ) : eventAttendees.length === 0 ? (
                     <div className="rounded-lg border border-white/10 bg-white/5 p-8 text-center">
                       <p className="text-slate-400">No attendees yet. Be the first to join!</p>
-                      {selectedEvent.creator?.id !== user?.id && (
+                      {selectedEvent.creator?.id !== user?.id && 
+                       !(selectedEvent.capacity && selectedEvent.attendeeCount !== undefined && selectedEvent.attendeeCount >= selectedEvent.capacity) && (
                         <motion.button
                           onClick={() => handleJoinEvent(selectedEvent.id)}
                           className="mt-4 rounded-xl bg-cyan-400 px-6 py-2 text-sm font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
@@ -985,6 +1146,9 @@ const HomePage = () => {
                         >
                           Join Event
                         </motion.button>
+                      )}
+                      {selectedEvent.capacity && selectedEvent.attendeeCount !== undefined && selectedEvent.attendeeCount >= selectedEvent.capacity && (
+                        <p className="mt-4 text-sm text-red-300">This event is at full capacity.</p>
                       )}
                     </div>
                   ) : (
@@ -996,7 +1160,7 @@ const HomePage = () => {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="rounded-xl border border-white/10 bg-white/5 p-4 hover:border-cyan-300/50 transition cursor-pointer"
-                            onClick={() => setSelectedProfile(attendee)}
+                            onClick={() => handleViewProfile(attendee)}
                           >
                             <div className="flex items-center gap-3">
                               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400/20 text-cyan-300">
@@ -1043,44 +1207,122 @@ const HomePage = () => {
               className="relative w-full max-w-md rounded-2xl bg-slate-900 p-8 shadow-2xl"
             >
               <button
-                onClick={() => setSelectedProfile(null)}
+                onClick={() => {
+                  setSelectedProfile(null)
+                  setSelectedProfileInterests([])
+                }}
                 className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-cyan-400/20 text-cyan-300">
-                    <UserIcon className="h-8 w-8" />
-                  </div>
-                  <div>
-                    <h3 className="font-display text-2xl font-semibold text-white">
+              <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+                {/* Profile Header */}
+                <div className="flex items-start gap-4">
+                  {selectedProfile.photo ? (
+                    <img
+                      src={selectedProfile.photo}
+                      alt={`${selectedProfile.firstName} ${selectedProfile.lastName}`}
+                      className="h-20 w-20 rounded-full object-cover border-2 border-cyan-400/30"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400/20 to-sky-400/20 text-cyan-300 border-2 border-cyan-400/30">
+                      <UserIcon className="h-10 w-10" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="font-display text-2xl font-semibold text-white mb-1">
                       {selectedProfile.firstName && selectedProfile.lastName
                         ? `${selectedProfile.firstName} ${selectedProfile.lastName}`
                         : 'Anonymous User'}
                     </h3>
+                    {selectedProfile.age && (
+                      <p className="text-slate-400 mb-2">Age: {selectedProfile.age}</p>
+                    )}
+                    {selectedProfile.location && (
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <MapPin className="h-4 w-4 text-cyan-300" />
+                        <span>
+                          {selectedProfile.location.city && selectedProfile.location.state
+                            ? `${selectedProfile.location.city}, ${selectedProfile.location.state}`
+                            : selectedProfile.location.country || 'Location not specified'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="space-y-3 border-t border-white/10 pt-4">
-                  {selectedProfile.age && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Age</span>
-                      <span className="text-white">{selectedProfile.age}</span>
+                {/* Bio */}
+                {selectedProfile.bio && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-sm font-semibold text-slate-300 mb-2">About</p>
+                    <p className="text-slate-200 leading-relaxed">{selectedProfile.bio}</p>
+                  </div>
+                )}
+
+                {/* Travel Style */}
+                {selectedProfile.travelStyle && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                      <Plane className="h-4 w-4 text-cyan-300" />
+                      Travel Style
+                    </p>
+                    <p className="text-slate-200">
+                      {selectedProfile.travelStyle === 'solo' ? 'Solo traveler' :
+                       selectedProfile.travelStyle === 'group' ? 'Group traveler' :
+                       selectedProfile.travelStyle === 'mixed' ? 'Mix of both' :
+                       selectedProfile.travelStyle === 'flexible' ? 'Flexible' :
+                       selectedProfile.travelStyle}
+                    </p>
+                  </div>
+                )}
+
+                {/* Languages */}
+                {selectedProfile.languages && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-cyan-300" />
+                      Languages
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProfile.languages.split(',').map((lang, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 rounded-full bg-cyan-400/20 text-cyan-200 text-xs border border-cyan-400/30"
+                        >
+                          {lang.trim()}
+                        </span>
+                      ))}
                     </div>
-                  )}
-                  {selectedProfile.location && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Location</span>
-                      <span className="text-white">
-                        {selectedProfile.location.city && selectedProfile.location.state
-                          ? `${selectedProfile.location.city}, ${selectedProfile.location.state}`
-                          : 'Not specified'}
-                      </span>
+                  </div>
+                )}
+
+                {/* Interests */}
+                {loadingProfileDetails ? (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-sm text-slate-400">Loading interests...</p>
+                  </div>
+                ) : selectedProfileInterests.length > 0 ? (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-cyan-300" />
+                      Interests
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProfileInterests.map((interest) => (
+                        <span
+                          key={interest.id}
+                          className="px-3 py-1 rounded-full bg-cyan-400/20 text-cyan-200 text-xs border border-cyan-400/30"
+                        >
+                          {interest.name}
+                        </span>
+                      ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </motion.div>
           </div>

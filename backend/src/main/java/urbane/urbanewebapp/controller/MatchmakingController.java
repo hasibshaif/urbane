@@ -269,6 +269,8 @@ public class MatchmakingController {
                 profileMap.put("age", profile.getAge());
                 profileMap.put("photo", profile.getPhoto());
                 profileMap.put("bio", profile.getBio());
+                profileMap.put("travelStyle", profile.getTravelStyle());
+                profileMap.put("languages", profile.getLanguages());
                 if (profile.getLocation() != null) {
                     Map<String, Object> locationData = new HashMap<>();
                     locationData.put("id", profile.getLocation().getId());
