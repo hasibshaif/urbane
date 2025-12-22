@@ -66,15 +66,16 @@ export interface ProfileRequest {
   photo?: string | null
   location?: BackendLocation | null
   bio?: string | null
+  travelStyle?: string | null
+  languages?: string | null // Comma-separated string
 }
 
-// Extended profile data stored in localStorage (not yet in backend)
+// Extended profile data stored in localStorage (for date of birth)
 export interface ExtendedProfileData {
   dateOfBirth: string
   languages: string[]
   interests: string[]
   travelStyle?: string
-  preferredActivityTypes?: string[]
   bio?: string
 }
 
@@ -518,6 +519,17 @@ export const interestApi = {
     })
     return handleResponse<BackendUser>(response)
   },
+
+  // Get user's interests
+  getUserInterests: async (userId: number): Promise<BackendInterest[]> => {
+    const response = await fetch(`${API_BASE_URL}/getUserInterests/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<BackendInterest[]>(response)
+  },
 }
 
 // Matchmaking types
@@ -561,7 +573,7 @@ export const matchmakingApi = {
   },
 
   // Send friend request (Yes)
-  sendFriendRequest: async (requesterId: number, receiverId: number): Promise<{ message: string; status: string }> => {
+  sendFriendRequest: async (requesterId: number, receiverId: number): Promise<{ message: string; status: string; isMatch?: boolean }> => {
     const response = await fetch(`${API_BASE_URL}/matchmaking/send-friend-request`, {
       method: 'POST',
       headers: {
@@ -569,7 +581,7 @@ export const matchmakingApi = {
       },
       body: JSON.stringify({ requesterId, receiverId }),
     })
-    return handleResponse<{ message: string; status: string }>(response)
+    return handleResponse<{ message: string; status: string; isMatch?: boolean }>(response)
   },
 
   // Reject friend request or skip user (No)
@@ -584,15 +596,15 @@ export const matchmakingApi = {
     return handleResponse<{ message: string; status: string }>(response)
   },
 
-  // Get all friends for a user
-  getFriends: async (userId: number): Promise<UserProfile[]> => {
+  // Get all friends/matches for a user
+  getFriends: async (userId: number): Promise<PotentialMatch[]> => {
     const response = await fetch(`${API_BASE_URL}/matchmaking/friends/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     })
-    return handleResponse<UserProfile[]>(response)
+    return handleResponse<PotentialMatch[]>(response)
   },
 }
 

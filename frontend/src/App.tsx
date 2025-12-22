@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage'
 import VerificationPage from './pages/VerificationPage'
 import OnboardingPage from './pages/OnboardingPage'
 import HomePage from './pages/HomePage'
+import ProfilePage from './pages/ProfilePage'
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => !!localStorage.getItem('authToken'))
@@ -66,6 +67,16 @@ function App() {
         element={
           needsAuth(true) ? (
             <HomePage />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          needsAuth(true) ? (
+            <ProfilePage />
           ) : (
             <Navigate to="/login" replace />
           )

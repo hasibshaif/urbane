@@ -58,9 +58,26 @@ public class MatchmakingController {
                 currentUser = currentUserWithInterests;
             }
 
-            // Get existing connections (to exclude already connected users)
+            // Get existing connections (to exclude users appropriately)
             List<FriendConnection> existingConnections = friendConnectionRepository.findAllConnectionsForUser(userId);
-            Set<Long> connectedUserIds = existingConnections.stream()
+            // Exclude logic:
+            // 1. Always exclude ACCEPTED (matched) and REJECTED users
+            // 2. For PENDING: Only exclude if current user is the requester (they initiated, so don't show them again)
+            //    If current user is the receiver, they should still see the requester (so they can respond)
+            Set<Long> excludedUserIds = existingConnections.stream()
+                    .filter(fc -> {
+                        // Always exclude ACCEPTED and REJECTED
+                        if (fc.getStatus() == FriendConnection.ConnectionStatus.ACCEPTED || 
+                            fc.getStatus() == FriendConnection.ConnectionStatus.REJECTED) {
+                            return true;
+                        }
+                        // For PENDING: only exclude if current user is the requester
+                        // (if current user is receiver, they should still see the requester to respond)
+                        if (fc.getStatus() == FriendConnection.ConnectionStatus.PENDING) {
+                            return fc.getRequester().getId().equals(userId);
+                        }
+                        return false;
+                    })
                     .map(fc -> {
                         if (fc.getRequester().getId().equals(userId)) {
                             return fc.getReceiver().getId();
@@ -78,8 +95,8 @@ public class MatchmakingController {
             List<Map<String, Object>> potentialMatches = new ArrayList<>();
 
             for (User user : allUsers) {
-                // Skip if already connected
-                if (connectedUserIds.contains(user.getId())) {
+                // Skip if already matched or rejected
+                if (excludedUserIds.contains(user.getId())) {
                     continue;
                 }
 
@@ -132,6 +149,47 @@ public class MatchmakingController {
                     }
                 }
 
+                // Check language similarity
+                if (currentProfile.getLanguages() != null && profile.getLanguages() != null) {
+                    String currentLanguages = currentProfile.getLanguages();
+                    String userLanguages = profile.getLanguages();
+                    if (!currentLanguages.isEmpty() && !userLanguages.isEmpty()) {
+                        List<String> currentLangList = new ArrayList<>(Arrays.asList(currentLanguages.split(",")));
+                        List<String> userLangList = new ArrayList<>(Arrays.asList(userLanguages.split(",")));
+                        currentLangList.replaceAll(String::trim);
+                        userLangList.replaceAll(String::trim);
+                        
+                        List<String> commonLanguages = new ArrayList<>(currentLangList);
+                        commonLanguages.retainAll(userLangList);
+                        
+                        if (!commonLanguages.isEmpty()) {
+                            hasSimilarity = true;
+                            similarities.add("Common languages: " + String.join(", ", commonLanguages));
+                        }
+                    }
+                }
+
+                // Check travel style similarity
+                if (currentProfile.getTravelStyle() != null && profile.getTravelStyle() != null) {
+                    String currentTravelStyle = currentProfile.getTravelStyle().trim();
+                    String userTravelStyle = profile.getTravelStyle().trim();
+                    if (!currentTravelStyle.isEmpty() && !userTravelStyle.isEmpty()) {
+                        // Match if same travel style, or if one is "flexible" or "mixed"
+                        if (currentTravelStyle.equalsIgnoreCase(userTravelStyle) ||
+                            currentTravelStyle.equalsIgnoreCase("flexible") ||
+                            userTravelStyle.equalsIgnoreCase("flexible") ||
+                            currentTravelStyle.equalsIgnoreCase("mixed") ||
+                            userTravelStyle.equalsIgnoreCase("mixed")) {
+                            hasSimilarity = true;
+                            String styleLabel = userTravelStyle.equalsIgnoreCase("solo") ? "Solo traveler" :
+                                              userTravelStyle.equalsIgnoreCase("group") ? "Group traveler" :
+                                              userTravelStyle.equalsIgnoreCase("mixed") ? "Mix of both" :
+                                              userTravelStyle.equalsIgnoreCase("flexible") ? "Flexible" : userTravelStyle;
+                            similarities.add("Travel style: " + styleLabel);
+                        }
+                    }
+                }
+
                 if (hasSimilarity) {
                     Map<String, Object> matchData = new HashMap<>();
                     matchData.put("userId", user.getId());
@@ -145,6 +203,8 @@ public class MatchmakingController {
                     profileData.put("age", profile.getAge());
                     profileData.put("photo", profile.getPhoto());
                     profileData.put("bio", profile.getBio());
+                    profileData.put("travelStyle", profile.getTravelStyle());
+                    profileData.put("languages", profile.getLanguages());
                     if (profile.getLocation() != null) {
                         Map<String, Object> locationData = new HashMap<>();
                         locationData.put("id", profile.getLocation().getId());
@@ -186,7 +246,11 @@ public class MatchmakingController {
     @GetMapping("/matchmaking/user-profile/{userId}")
     public ResponseEntity<Map<String, Object>> getUserProfile(@PathVariable Long userId) {
         try {
-            User user = userRepository.findById(userId).orElse(null);
+            // Use eager fetch to load interests
+            User user = userRepository.findAllWithInterests().stream()
+                    .filter(u -> u.getId().equals(userId))
+                    .findFirst()
+                    .orElse(null);
             if (user == null) {
                 return ResponseEntity.notFound().build();
             }
@@ -265,9 +329,48 @@ public class MatchmakingController {
             if (existingConnection.isPresent()) {
                 FriendConnection connection = existingConnection.get();
                 if (connection.getStatus() == FriendConnection.ConnectionStatus.ACCEPTED) {
-                    return ResponseEntity.ok(Map.of("message", "Already friends", "status", "ACCEPTED"));
+                    return ResponseEntity.ok(Map.of("message", "Already friends", "status", "ACCEPTED", "isMatch", true));
                 } else if (connection.getStatus() == FriendConnection.ConnectionStatus.PENDING) {
-                    return ResponseEntity.ok(Map.of("message", "Friend request already pending", "status", "PENDING"));
+                    // Check if this is a mutual match (other user already sent a request)
+                    // If requester is the receiver in the existing connection, it means the other user sent first
+                    if (connection.getReceiver().getId().equals(requesterId)) {
+                        // Mutual match! Both users clicked yes
+                        connection.setStatus(FriendConnection.ConnectionStatus.ACCEPTED);
+                        friendConnectionRepository.save(connection);
+                        return ResponseEntity.ok(Map.of(
+                            "message", "It's a match! You're now friends!",
+                            "status", "ACCEPTED",
+                            "isMatch", true,
+                            "connectionId", connection.getId()
+                        ));
+                    } else {
+                        // This user already sent a request
+                        return ResponseEntity.ok(Map.of("message", "Friend request already pending", "status", "PENDING", "isMatch", false));
+                    }
+                } else if (connection.getStatus() == FriendConnection.ConnectionStatus.REJECTED) {
+                    // Can't send request if already rejected
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot send request to a user who was previously rejected", "status", "REJECTED"));
+                }
+            }
+
+            // Check if there's a pending request from the other direction (mutual match scenario)
+            // This handles the case where receiver already sent a request to requester
+            Optional<FriendConnection> reverseConnection = 
+                friendConnectionRepository.findConnectionBetweenUsers(receiverId, requesterId);
+            
+            if (reverseConnection.isPresent()) {
+                FriendConnection connection = reverseConnection.get();
+                if (connection.getStatus() == FriendConnection.ConnectionStatus.PENDING && 
+                    connection.getRequester().getId().equals(receiverId)) {
+                    // Mutual match! Both users clicked yes
+                    connection.setStatus(FriendConnection.ConnectionStatus.ACCEPTED);
+                    friendConnectionRepository.save(connection);
+                    return ResponseEntity.ok(Map.of(
+                        "message", "It's a match! You're now friends!",
+                        "status", "ACCEPTED",
+                        "isMatch", true,
+                        "connectionId", connection.getId()
+                    ));
                 }
             }
 
@@ -282,6 +385,7 @@ public class MatchmakingController {
             return ResponseEntity.ok(Map.of(
                 "message", "Friend request sent successfully",
                 "status", "PENDING",
+                "isMatch", false,
                 "connectionId", friendRequest.getId()
             ));
         } catch (Exception e) {
@@ -339,27 +443,48 @@ public class MatchmakingController {
     }
 
     /**
-     * Get all friends for a user
+     * Get all matches (friends) for a user
      */
     @GetMapping("/matchmaking/friends/{userId}")
     public ResponseEntity<List<Map<String, Object>>> getFriends(@PathVariable Long userId) {
         try {
+            // Get current user with interests loaded
+            User currentUser = userRepository.findAllWithInterests().stream()
+                    .filter(user -> user.getId().equals(userId))
+                    .findFirst()
+                    .orElse(null);
+            
+            if (currentUser == null || currentUser.getProfile() == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Profile currentProfile = currentUser.getProfile();
             List<FriendConnection> acceptedConnections = 
                 friendConnectionRepository.findAcceptedConnectionsForUser(userId);
 
             List<Map<String, Object>> friends = new ArrayList<>();
+            Set<Long> currentUserInterestIds = currentUser.getInterests().stream()
+                    .map(Interest::getId)
+                    .collect(Collectors.toSet());
+
             for (FriendConnection connection : acceptedConnections) {
                 User friend = connection.getRequester().getId().equals(userId) 
                     ? connection.getReceiver() 
                     : connection.getRequester();
 
+                // Eagerly load friend's interests
+                User friendWithInterests = userRepository.findAllWithInterests().stream()
+                        .filter(u -> u.getId().equals(friend.getId()))
+                        .findFirst()
+                        .orElse(friend);
+
                 Map<String, Object> friendData = new HashMap<>();
-                friendData.put("userId", friend.getId());
-                friendData.put("email", friend.getEmail());
+                friendData.put("userId", friendWithInterests.getId());
+                friendData.put("email", friendWithInterests.getEmail());
                 
                 // Build profile data without circular references
-                if (friend.getProfile() != null) {
-                    Profile profile = friend.getProfile();
+                if (friendWithInterests.getProfile() != null) {
+                    Profile profile = friendWithInterests.getProfile();
                     Map<String, Object> profileMap = new HashMap<>();
                     profileMap.put("id", profile.getId());
                     profileMap.put("firstName", profile.getFirstName());
@@ -367,6 +492,8 @@ public class MatchmakingController {
                     profileMap.put("age", profile.getAge());
                     profileMap.put("photo", profile.getPhoto());
                     profileMap.put("bio", profile.getBio());
+                    profileMap.put("travelStyle", profile.getTravelStyle());
+                    profileMap.put("languages", profile.getLanguages());
                     if (profile.getLocation() != null) {
                         Map<String, Object> locationData = new HashMap<>();
                         locationData.put("id", profile.getLocation().getId());
@@ -381,7 +508,7 @@ public class MatchmakingController {
                 }
                 
                 // Build interests data without circular references
-                List<Map<String, Object>> interestsData = friend.getInterests().stream()
+                List<Map<String, Object>> interestsData = friendWithInterests.getInterests().stream()
                         .map(interest -> {
                             Map<String, Object> interestData = new HashMap<>();
                             interestData.put("id", interest.getId());
@@ -390,6 +517,35 @@ public class MatchmakingController {
                         })
                         .collect(Collectors.toList());
                 friendData.put("interests", interestsData);
+
+                // Calculate similarities for display
+                List<String> similarities = new ArrayList<>();
+                if (friendWithInterests.getProfile() != null) {
+                    Profile friendProfile = friendWithInterests.getProfile();
+                    
+                    // Shared interests
+                    Set<Long> friendInterestIds = friendWithInterests.getInterests().stream()
+                            .map(Interest::getId)
+                            .collect(Collectors.toSet());
+                    friendInterestIds.retainAll(currentUserInterestIds);
+                    if (!friendInterestIds.isEmpty()) {
+                        List<String> sharedInterestNames = friendWithInterests.getInterests().stream()
+                                .filter(interest -> friendInterestIds.contains(interest.getId()))
+                                .map(Interest::getName)
+                                .collect(Collectors.toList());
+                        similarities.add("Shared interests: " + String.join(", ", sharedInterestNames));
+                    }
+                    
+                    // Similar age
+                    if (currentProfile.getAge() != null && friendProfile.getAge() != null) {
+                        long ageDiff = Math.abs(currentProfile.getAge() - friendProfile.getAge());
+                        if (ageDiff <= 5) {
+                            similarities.add("Similar age");
+                        }
+                    }
+                }
+                friendData.put("similarities", similarities);
+                
                 friends.add(friendData);
             }
 

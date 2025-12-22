@@ -47,4 +47,9 @@ public class Profile {
     @Column(name = "bio", length = 500)
     private String bio;
 
+    @Column(name = "travel_style", length = 50)
+    private String travelStyle;
+
+    @Column(name = "languages", length = 500)
+    private String languages; // JSON array stored as string: ["English", "Spanish"]
 }

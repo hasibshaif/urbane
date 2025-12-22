@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye, Heart, XCircle, Sparkles } from 'lucide-react'
+import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye, Heart, XCircle, Sparkles, Settings } from 'lucide-react'
 import { eventApi, authApi, matchmakingApi, type BackendEvent, type CreateEventRequest, type BackendProfile, type PotentialMatch } from '../services/api'
 
 interface EventWithAttendees extends BackendEvent {
@@ -28,6 +28,8 @@ const HomePage = () => {
   const [loadingMatches, setLoadingMatches] = useState(false)
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const [viewingMatchProfile, setViewingMatchProfile] = useState<PotentialMatch | null>(null)
+  const [matches, setMatches] = useState<PotentialMatch[]>([])
+  const [loadingMatchesList, setLoadingMatchesList] = useState(false)
 
   // Form state
   const [eventTitle, setEventTitle] = useState('')
@@ -54,6 +56,7 @@ const HomePage = () => {
     // In the future, this should be based on user's location
     loadEvents()
     loadPotentialMatches(userData.id)
+    loadMatches(userData.id)
   }, [navigate])
 
   const loadEvents = async () => {
@@ -213,19 +216,50 @@ const HomePage = () => {
     }
   }
 
+  // Reload matches when switching to friends tab (to reflect any profile updates)
+  useEffect(() => {
+    if (activeTab === 'friends' && user) {
+      loadPotentialMatches(user.id)
+      loadMatches(user.id)
+    }
+  }, [activeTab])
+
+  const loadMatches = async (userId: number) => {
+    try {
+      setLoadingMatchesList(true)
+      const matchesList = await matchmakingApi.getFriends(userId)
+      setMatches(matchesList)
+    } catch (err) {
+      console.error('Failed to load matches:', err)
+      setMatches([])
+    } finally {
+      setLoadingMatchesList(false)
+    }
+  }
+
   const handleYesFriend = async (match: PotentialMatch) => {
     if (!user) return
     
     try {
-      await matchmakingApi.sendFriendRequest(user.id, match.userId)
-      // Remove this match from the list and move to next
+      const response = await matchmakingApi.sendFriendRequest(user.id, match.userId)
+      // Check if it's a mutual match
+      if (response.isMatch) {
+        alert('🎉 It\'s a match! You\'re now friends!')
+        // Reload matches to show the new match
+        await loadMatches(user.id)
+      }
+      // Remove this match from the list
       const newMatches = potentialMatches.filter(m => m.userId !== match.userId)
       setPotentialMatches(newMatches)
-      if (currentMatchIndex >= newMatches.length && newMatches.length > 0) {
-        setCurrentMatchIndex(newMatches.length - 1)
-      } else if (newMatches.length === 0) {
+      
+      // Move to next match or reset index if no more matches
+      if (newMatches.length === 0) {
         setCurrentMatchIndex(0)
+      } else if (currentMatchIndex >= newMatches.length) {
+        setCurrentMatchIndex(newMatches.length - 1)
       }
+      // If we're not at the end, stay at current index (which will now show the next match)
+      
       setViewingMatchProfile(null)
     } catch (err) {
       console.error('Failed to send friend request:', err)
@@ -238,14 +272,18 @@ const HomePage = () => {
     
     try {
       await matchmakingApi.rejectFriendRequest(user.id, match.userId)
-      // Remove this match from the list and move to next
+      // Remove this match from the list
       const newMatches = potentialMatches.filter(m => m.userId !== match.userId)
       setPotentialMatches(newMatches)
-      if (currentMatchIndex >= newMatches.length && newMatches.length > 0) {
-        setCurrentMatchIndex(newMatches.length - 1)
-      } else if (newMatches.length === 0) {
+      
+      // Move to next match or reset index if no more matches
+      if (newMatches.length === 0) {
         setCurrentMatchIndex(0)
+      } else if (currentMatchIndex >= newMatches.length) {
+        setCurrentMatchIndex(newMatches.length - 1)
       }
+      // If we're not at the end, stay at current index (which will now show the next match)
+      
       setViewingMatchProfile(null)
     } catch (err) {
       console.error('Failed to reject friend request:', err)
@@ -304,6 +342,15 @@ const HomePage = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <motion.button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:border-cyan-300 hover:text-white"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Settings className="h-4 w-4" />
+              Profile
+            </motion.button>
             <motion.button
               onClick={() => setShowCreateForm(true)}
               className="flex items-center gap-2 rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
@@ -661,6 +708,95 @@ const HomePage = () => {
                   )}
                 </div>
               ) : null}
+
+              {/* Matches Section - Inside Find Friends Tab */}
+              <div className="mt-12">
+                <h2 className="text-2xl font-display font-semibold text-white mb-6 flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-cyan-400" />
+                  Matches ({matches.length})
+                </h2>
+                
+                {loadingMatchesList ? (
+                  <div className="text-center py-8 text-slate-400">Loading matches...</div>
+                ) : matches.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <p>No matches yet. Start swiping to find your travel buddies! ✈️</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {matches.map((match) => (
+                      <motion.div
+                        key={match.userId}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="glow-card relative overflow-hidden rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-6"
+                      >
+                        {/* Profile Photo */}
+                        <div className="flex items-center gap-4 mb-4">
+                          {match.profile.photo ? (
+                            <img
+                              src={match.profile.photo}
+                              alt={`${match.profile.firstName} ${match.profile.lastName}`}
+                              className="h-16 w-16 rounded-full object-cover border-2 border-cyan-400/50"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                          ) : (
+                            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center border-2 border-cyan-400/50">
+                              <UserIcon className="h-8 w-8 text-white" />
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-semibold text-white text-lg">
+                              {match.profile.firstName} {match.profile.lastName}
+                            </h3>
+                            {match.profile.age && (
+                              <p className="text-sm text-slate-400">{match.profile.age} years old</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Bio */}
+                        {match.profile.bio && (
+                          <p className="text-sm text-slate-300 mb-4 line-clamp-2">{match.profile.bio}</p>
+                        )}
+
+                        {/* Interests */}
+                        {match.interests.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex flex-wrap gap-2">
+                              {match.interests.slice(0, 3).map((interest) => (
+                                <span
+                                  key={interest.id}
+                                  className="px-2 py-1 rounded-full bg-cyan-400/20 text-cyan-200 text-xs border border-cyan-400/30"
+                                >
+                                  {interest.name}
+                                </span>
+                              ))}
+                              {match.interests.length > 3 && (
+                                <span className="px-2 py-1 rounded-full bg-slate-700/50 text-slate-300 text-xs">
+                                  +{match.interests.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* View Profile Button */}
+                        <motion.button
+                          onClick={() => handleViewMatchProfile(match)}
+                          className="w-full mt-4 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-cyan-200 text-sm font-medium transition hover:bg-cyan-400/20 hover:border-cyan-400"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          View Profile
+                        </motion.button>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -674,96 +810,96 @@ const HomePage = () => {
                 <p className="mt-2 text-slate-300">Discover and join events happening around you</p>
               </div>
 
-          {loading ? (
-            <div className="text-center py-12">
-              <p className="text-slate-400">Loading events...</p>
-            </div>
-          ) : error ? (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          ) : events.length === 0 ? (
-            <div className="rounded-lg border border-white/10 bg-white/5 p-12 text-center">
-              <p className="text-slate-400">No events found. Be the first to create one!</p>
-            </div>
-          ) : (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {events.map((event) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="glow-card relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 p-6"
-                >
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-display text-xl font-semibold text-white">{event.title}</h3>
-                      {event.description && (
-                        <p className="mt-2 text-sm text-slate-300 line-clamp-2">{event.description}</p>
-                      )}
-                    </div>
+              {loading ? (
+                <div className="text-center py-12">
+                  <p className="text-slate-400">Loading events...</p>
+                </div>
+              ) : error ? (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {error}
+                </div>
+              ) : events.length === 0 ? (
+                <div className="rounded-lg border border-white/10 bg-white/5 p-12 text-center">
+                  <p className="text-slate-400">No events found. Be the first to create one!</p>
+                </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {events.map((event) => (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="glow-card relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 p-6"
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-display text-xl font-semibold text-white">{event.title}</h3>
+                          {event.description && (
+                            <p className="mt-2 text-sm text-slate-300 line-clamp-2">{event.description}</p>
+                          )}
+                        </div>
 
-                    <div className="space-y-2 text-sm text-slate-400">
-                      {event.creator && (
-                        <div className="text-xs text-cyan-200">
-                          Created by: {event.creator.profile?.firstName || event.creator.email}
-                        </div>
-                      )}
-                      {event.city && event.state && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-cyan-300" />
-                          <span>{event.city}, {event.state}</span>
-                        </div>
-                      )}
-                      {event.date && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-cyan-300" />
-                          <span>{formatDate(event.date)}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-cyan-300" />
-                        <span>
-                          {event.attendeeCount !== undefined && (
-                            <>{event.attendeeCount} {event.capacity ? `/${event.capacity}` : ''} attending</>
+                        <div className="space-y-2 text-sm text-slate-400">
+                          {event.creator && (
+                            <div className="text-xs text-cyan-200">
+                              Created by: {event.creator.profile?.firstName || event.creator.email}
+                            </div>
                           )}
-                          {event.attendeeCount === undefined && (
-                            <>{event.capacity ? `Up to ${event.capacity} people` : 'Unlimited capacity'}</>
+                          {event.city && event.state && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-cyan-300" />
+                              <span>{event.city}, {event.state}</span>
+                            </div>
                           )}
-                        </span>
+                          {event.date && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-cyan-300" />
+                              <span>{formatDate(event.date)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-cyan-300" />
+                            <span>
+                              {event.attendeeCount !== undefined && (
+                                <>{event.attendeeCount} {event.capacity ? `/${event.capacity}` : ''} attending</>
+                              )}
+                              {event.attendeeCount === undefined && (
+                                <>{event.capacity ? `Up to ${event.capacity} people` : 'Unlimited capacity'}</>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <motion.button
+                            onClick={() => handleViewEventDetails(event)}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-cyan-300 hover:bg-white/10 hover:text-white"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Details
+                          </motion.button>
+                          {event.creator?.id === user?.id ? (
+                            <span className="flex-1 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-center text-sm text-cyan-200">
+                              Your Event
+                            </span>
+                          ) : (
+                            <motion.button
+                              onClick={() => handleJoinEvent(event.id)}
+                              className="flex-1 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              Join Event
+                            </motion.button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <motion.button
-                        onClick={() => handleViewEventDetails(event)}
-                        className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-cyan-300 hover:bg-white/10 hover:text-white"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Eye className="h-4 w-4" />
-                        View Details
-                      </motion.button>
-                      {event.creator?.id === user?.id ? (
-                        <span className="flex-1 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-center text-sm text-cyan-200">
-                          Your Event
-                        </span>
-                      ) : (
-                        <motion.button
-                          onClick={() => handleJoinEvent(event.id)}
-                          className="flex-1 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow transition hover:bg-cyan-300"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          Join Event
-                        </motion.button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </main>

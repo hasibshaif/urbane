@@ -195,6 +195,53 @@ WHERE fc.status = 'ACCEPTED'
 ORDER BY friend_name;
 ```
 
+### 11a. View All Friend Connections (All Statuses)
+```sql
+-- See all friend connections with their status
+SELECT 
+    fc.connection_id,
+    fc.status,
+    fc.requester_id,
+    requester.email AS requester_email,
+    requester_profile.first_name || ' ' || requester_profile.last_name AS requester_name,
+    fc.receiver_id,
+    receiver.email AS receiver_email,
+    receiver_profile.first_name || ' ' || receiver_profile.last_name AS receiver_name
+FROM friend_connections fc
+JOIN users requester ON fc.requester_id = requester.user_id
+JOIN users receiver ON fc.receiver_id = receiver.user_id
+LEFT JOIN profiles requester_profile ON requester.user_id = requester_profile.user_id
+LEFT JOIN profiles receiver_profile ON receiver.user_id = receiver_profile.user_id
+ORDER BY fc.connection_id;
+```
+
+### 11b. Delete All Friend Connections (Reset All Matches)
+```sql
+-- WARNING: This will delete ALL friend connections
+-- Use this to completely reset the matching system
+DELETE FROM friend_connections;
+```
+
+### 11c. Delete Friend Connections for Specific Users
+```sql
+-- Delete connections between user_id 1 and user_id 2
+DELETE FROM friend_connections 
+WHERE (requester_id = 1 AND receiver_id = 2) 
+   OR (requester_id = 2 AND receiver_id = 1);
+```
+
+### 11d. Delete Only PENDING Connections
+```sql
+-- Delete all pending friend requests (useful for reset)
+DELETE FROM friend_connections WHERE status = 'PENDING';
+```
+
+### 11e. Delete Only REJECTED Connections
+```sql
+-- Delete all rejected connections (allow users to see each other again)
+DELETE FROM friend_connections WHERE status = 'REJECTED';
+```
+
 ## Quick Stats
 
 ### 12. Database Statistics

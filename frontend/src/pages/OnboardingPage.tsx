@@ -47,16 +47,6 @@ const TRAVEL_STYLE_OPTIONS = [
   { value: 'flexible', label: 'Flexible' },
 ] as const
 
-const ACTIVITY_TYPE_OPTIONS = [
-  'Outdoor Activities',
-  'Cultural Experiences',
-  'Nightlife & Entertainment',
-  'Food & Culinary',
-  'Relaxation & Wellness',
-  'Adventure & Sports',
-  'Shopping & Markets',
-  'Social & Networking',
-] as const
 
 const OnboardingPage = () => {
   const navigate = useNavigate()
@@ -72,7 +62,6 @@ const OnboardingPage = () => {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([])
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [travelStyle, setTravelStyle] = useState('')
-  const [preferredActivities, setPreferredActivities] = useState<string[]>([])
   const [bio, setBio] = useState('')
 
   const calculateAge = (dob: string): number => {
@@ -139,10 +128,6 @@ const OnboardingPage = () => {
       return
     }
 
-    if (preferredActivities.length === 0) {
-      setError('Please select at least one preferred activity type')
-      return
-    }
 
     setLoading(true)
 
@@ -172,7 +157,7 @@ const OnboardingPage = () => {
     }
     const userAge = calculateAge(dateOfBirth)
 
-    // Prepare profile data for backend (only fields backend supports)
+    // Prepare profile data for backend (including travel style and languages)
     const profileData: ProfileRequest = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -180,15 +165,16 @@ const OnboardingPage = () => {
       photo: photo.trim() || null,
       location: null, // Can be added later if needed
       bio: bio.trim() || null,
+      travelStyle: travelStyle || null,
+      languages: selectedLanguages.length > 0 ? selectedLanguages.join(',') : null,
     }
 
-    // Store extended profile data in localStorage (for future backend support)
+    // Store extended profile data in localStorage (for date of birth)
     const extendedData: ExtendedProfileData = {
       dateOfBirth,
       languages: selectedLanguages,
       interests: selectedInterests,
       travelStyle: travelStyle || undefined,
-      preferredActivityTypes: preferredActivities,
       bio: bio.trim() || undefined,
     }
 
@@ -507,30 +493,6 @@ const OnboardingPage = () => {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
-                        <TentTree className="h-4 w-4 text-cyan-300" />
-                        Preferred Activity Types (select at least one)
-                      </label>
-                      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {ACTIVITY_TYPE_OPTIONS.map((activity) => (
-                          <motion.button
-                            key={activity}
-                            type="button"
-                            onClick={() => toggleSelection(activity, preferredActivities, setPreferredActivities)}
-                            className={`rounded-lg border px-3 py-2 text-xs transition ${
-                              preferredActivities.includes(activity)
-                                ? 'border-cyan-400 bg-cyan-400/20 text-cyan-200'
-                                : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-300/50'
-                            }`}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            {activity}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
                   </motion.div>
                 )}
 
@@ -568,7 +530,6 @@ const OnboardingPage = () => {
                         {travelStyle && (
                           <li>• Travel Style: {TRAVEL_STYLE_OPTIONS.find((s) => s.value === travelStyle)?.label}</li>
                         )}
-                        <li>• Preferred Activity Types: {preferredActivities.length} selected</li>
                         {bio && <li>• Bio: {bio.length} characters</li>}
                       </ul>
                     </div>
@@ -628,10 +589,6 @@ const OnboardingPage = () => {
                           }
                           if (!travelStyle) {
                             setError('Please select a travel style')
-                            return
-                          }
-                          if (preferredActivities.length === 0) {
-                            setError('Please select at least one preferred activity type')
                             return
                           }
                         }

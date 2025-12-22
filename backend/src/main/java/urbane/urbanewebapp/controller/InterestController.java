@@ -9,7 +9,9 @@ import urbane.urbanewebapp.repository.InterestRepository;
 import urbane.urbanewebapp.repository.UserRepository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class InterestController {
@@ -22,8 +24,16 @@ public class InterestController {
 
     // Get all interests
     @GetMapping("/getAllInterests")
-    public ResponseEntity<List<Interest>> getAllInterests() {
-        return ResponseEntity.ok(interestRepository.findAll());
+    public ResponseEntity<List<Map<String, Object>>> getAllInterests() {
+        List<Map<String, Object>> interestsData = interestRepository.findAll().stream()
+                .map(interest -> {
+                    Map<String, Object> interestData = new HashMap<>();
+                    interestData.put("id", interest.getId());
+                    interestData.put("name", interest.getName());
+                    return interestData;
+                })
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(interestsData);
     }
 
     // Add interests to a user
@@ -49,6 +59,32 @@ public class InterestController {
 
         user.setInterests(interests);
         return ResponseEntity.ok(userRepository.save(user));
+    }
+
+    // Get user's interests (simple endpoint without circular references)
+    @GetMapping("/getUserInterests/{userId}")
+    public ResponseEntity<List<Map<String, Object>>> getUserInterests(@PathVariable Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Eagerly fetch interests
+        User userWithInterests = userRepository.findAllWithInterests().stream()
+                .filter(u -> u.getId().equals(userId))
+                .findFirst()
+                .orElse(user);
+
+        List<Map<String, Object>> interestsData = userWithInterests.getInterests().stream()
+                .map(interest -> {
+                    Map<String, Object> interestData = new HashMap<>();
+                    interestData.put("id", interest.getId());
+                    interestData.put("name", interest.getName());
+                    return interestData;
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        return ResponseEntity.ok(interestsData);
     }
 }
 
