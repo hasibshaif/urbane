@@ -8,3 +8,4 @@ public class CognitoRegisterRequest {
     private String password;
 }
 
+

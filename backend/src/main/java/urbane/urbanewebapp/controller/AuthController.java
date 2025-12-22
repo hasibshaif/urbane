@@ -199,12 +199,25 @@ public class AuthController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Email not verified. Please verify your email address.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+        } catch (IllegalStateException e) {
+            // Configuration errors from CognitoService
+            System.err.println("Cognito configuration error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         } catch (Exception e) {
             System.err.println("Error logging in user: " + e.getMessage());
             System.err.println("Exception type: " + e.getClass().getName());
             e.printStackTrace();
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Login failed: " + e.getMessage());
+            String errorMessage = e.getMessage();
+            // Provide more user-friendly error messages
+            if (errorMessage != null && errorMessage.contains("validation")) {
+                errorResponse.put("error", "Authentication failed. Please check that your Cognito app client has USER_PASSWORD_AUTH enabled. See COGNITO_TROUBLESHOOTING.md for details.");
+            } else {
+                errorResponse.put("error", "Login failed: " + errorMessage);
+            }
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         }
     }

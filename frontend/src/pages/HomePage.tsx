@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye } from 'lucide-react'
-import { eventApi, authApi, type BackendEvent, type CreateEventRequest, type BackendProfile } from '../services/api'
+import { Plus, MapPin, Calendar, Users, LogOut, X, User as UserIcon, Eye, Heart, XCircle, Sparkles } from 'lucide-react'
+import { eventApi, authApi, matchmakingApi, type BackendEvent, type CreateEventRequest, type BackendProfile, type PotentialMatch } from '../services/api'
 
 interface EventWithAttendees extends BackendEvent {
   attendeeCount?: number
@@ -11,6 +11,7 @@ interface EventWithAttendees extends BackendEvent {
 
 const HomePage = () => {
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState<'friends' | 'events'>('friends')
   const [events, setEvents] = useState<EventWithAttendees[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -21,6 +22,12 @@ const HomePage = () => {
   const [eventAttendees, setEventAttendees] = useState<BackendProfile[]>([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
   const [selectedProfile, setSelectedProfile] = useState<BackendProfile | null>(null)
+  
+  // Matchmaking state
+  const [potentialMatches, setPotentialMatches] = useState<PotentialMatch[]>([])
+  const [loadingMatches, setLoadingMatches] = useState(false)
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+  const [viewingMatchProfile, setViewingMatchProfile] = useState<PotentialMatch | null>(null)
 
   // Form state
   const [eventTitle, setEventTitle] = useState('')
@@ -46,6 +53,7 @@ const HomePage = () => {
     // Fetch events - for now, we'll fetch all events by a default state
     // In the future, this should be based on user's location
     loadEvents()
+    loadPotentialMatches(userData.id)
   }, [navigate])
 
   const loadEvents = async () => {
@@ -190,6 +198,66 @@ const HomePage = () => {
     await authApi.logout()
     navigate('/login')
   }
+
+  const loadPotentialMatches = async (userId: number) => {
+    try {
+      setLoadingMatches(true)
+      const matches = await matchmakingApi.getPotentialMatches(userId)
+      setPotentialMatches(matches)
+      setCurrentMatchIndex(0)
+    } catch (err) {
+      console.error('Failed to load potential matches:', err)
+      setPotentialMatches([])
+    } finally {
+      setLoadingMatches(false)
+    }
+  }
+
+  const handleYesFriend = async (match: PotentialMatch) => {
+    if (!user) return
+    
+    try {
+      await matchmakingApi.sendFriendRequest(user.id, match.userId)
+      // Remove this match from the list and move to next
+      const newMatches = potentialMatches.filter(m => m.userId !== match.userId)
+      setPotentialMatches(newMatches)
+      if (currentMatchIndex >= newMatches.length && newMatches.length > 0) {
+        setCurrentMatchIndex(newMatches.length - 1)
+      } else if (newMatches.length === 0) {
+        setCurrentMatchIndex(0)
+      }
+      setViewingMatchProfile(null)
+    } catch (err) {
+      console.error('Failed to send friend request:', err)
+      alert('Failed to send friend request. Please try again.')
+    }
+  }
+
+  const handleNoFriend = async (match: PotentialMatch) => {
+    if (!user) return
+    
+    try {
+      await matchmakingApi.rejectFriendRequest(user.id, match.userId)
+      // Remove this match from the list and move to next
+      const newMatches = potentialMatches.filter(m => m.userId !== match.userId)
+      setPotentialMatches(newMatches)
+      if (currentMatchIndex >= newMatches.length && newMatches.length > 0) {
+        setCurrentMatchIndex(newMatches.length - 1)
+      } else if (newMatches.length === 0) {
+        setCurrentMatchIndex(0)
+      }
+      setViewingMatchProfile(null)
+    } catch (err) {
+      console.error('Failed to reject friend request:', err)
+      alert('Failed to process. Please try again.')
+    }
+  }
+
+  const handleViewMatchProfile = (match: PotentialMatch) => {
+    setViewingMatchProfile(match)
+  }
+
+  const currentMatch = potentialMatches[currentMatchIndex]
 
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return 'Date TBD'
@@ -392,12 +460,219 @@ const HomePage = () => {
 
         {/* Main Content */}
         <main>
-          <div className="mb-8">
-            <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">
-              Nearby Events
-            </h2>
-            <p className="mt-2 text-slate-300">Discover and join events happening around you</p>
+          {/* Tabs */}
+          <div className="mb-8 flex gap-4 border-b border-white/10">
+            <button
+              onClick={() => setActiveTab('friends')}
+              className={`pb-4 px-2 font-semibold transition ${
+                activeTab === 'friends'
+                  ? 'border-b-2 border-cyan-400 text-cyan-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Find Friends
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('events')}
+              className={`pb-4 px-2 font-semibold transition ${
+                activeTab === 'events'
+                  ? 'border-b-2 border-cyan-400 text-cyan-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Events
+              </div>
+            </button>
           </div>
+
+          {/* Find Friends Section */}
+          {activeTab === 'friends' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">
+                  Find Your Travel Companions
+                </h2>
+                <p className="mt-2 text-slate-300">Discover people with similar interests and travel preferences</p>
+              </div>
+
+              {loadingMatches ? (
+                <div className="text-center py-12">
+                  <p className="text-slate-400">Finding your perfect matches...</p>
+                </div>
+              ) : potentialMatches.length === 0 ? (
+                <div className="rounded-lg border border-white/10 bg-white/5 p-12 text-center">
+                  <Sparkles className="h-12 w-12 mx-auto mb-4 text-cyan-300" />
+                  <p className="text-slate-300 text-lg mb-2">No matches found at the moment</p>
+                  <p className="text-slate-400">Check back later or update your profile to find more matches!</p>
+                </div>
+              ) : currentMatch ? (
+                <div className="max-w-2xl mx-auto">
+                  <motion.div
+                    key={currentMatch.userId}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="glow-card relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 p-8"
+                  >
+                    {/* Profile Header */}
+                    <div className="flex items-start gap-6 mb-6">
+                      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400/20 to-sky-400/20 text-cyan-300 border-2 border-cyan-400/30">
+                        {currentMatch.profile.photo ? (
+                          <img
+                            src={currentMatch.profile.photo}
+                            alt={`${currentMatch.profile.firstName} ${currentMatch.profile.lastName}`}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <UserIcon className="h-12 w-12" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-display text-2xl font-semibold text-white mb-1">
+                          {currentMatch.profile.firstName && currentMatch.profile.lastName
+                            ? `${currentMatch.profile.firstName} ${currentMatch.profile.lastName}`
+                            : 'Anonymous User'}
+                        </h3>
+                        {currentMatch.profile.age && (
+                          <p className="text-slate-400 mb-2">Age: {currentMatch.profile.age}</p>
+                        )}
+                        {currentMatch.profile.location && (
+                          <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <MapPin className="h-4 w-4 text-cyan-300" />
+                            <span>
+                              {currentMatch.profile.location.city && currentMatch.profile.location.state
+                                ? `${currentMatch.profile.location.city}, ${currentMatch.profile.location.state}`
+                                : currentMatch.profile.location.country || 'Location not specified'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Similarities */}
+                    {currentMatch.similarities.length > 0 && (
+                      <div className="mb-6 p-4 rounded-xl bg-cyan-400/10 border border-cyan-400/20">
+                        <p className="text-sm font-semibold text-cyan-200 mb-2 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          What you have in common:
+                        </p>
+                        <ul className="space-y-1">
+                          {currentMatch.similarities.map((similarity, idx) => (
+                            <li key={idx} className="text-sm text-cyan-100">• {similarity}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Bio */}
+                    {currentMatch.profile.bio && (
+                      <div className="mb-6">
+                        <p className="text-sm font-semibold text-slate-300 mb-2">About</p>
+                        <p className="text-slate-200 leading-relaxed">{currentMatch.profile.bio}</p>
+                      </div>
+                    )}
+
+                    {/* Interests */}
+                    {currentMatch.interests.length > 0 && (
+                      <div className="mb-6">
+                        <p className="text-sm font-semibold text-slate-300 mb-3">Interests</p>
+                        <div className="flex flex-wrap gap-2">
+                          {currentMatch.interests.map((interest) => (
+                            <span
+                              key={interest.id}
+                              className="px-3 py-1 rounded-full bg-cyan-400/20 text-cyan-200 text-xs border border-cyan-400/30"
+                            >
+                              {interest.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-4 pt-4 border-t border-white/10">
+                      <motion.button
+                        onClick={() => handleNoFriend(currentMatch)}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 border-red-400/50 bg-gradient-to-br from-red-400/10 to-red-500/5 px-6 py-4 text-red-200 font-semibold transition hover:from-red-400/20 hover:to-red-500/10 hover:border-red-400 hover:shadow-lg hover:shadow-red-400/20"
+                        whileHover={{ scale: 0.98, rotate: -1 }}
+                        whileTap={{ scale: 0.95 }}
+                        animate={{ opacity: [0.9, 1, 0.9] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        <XCircle className="h-5 w-5" />
+                        <span className="text-sm">No Thanks</span>
+                      </motion.button>
+                      <motion.button
+                        onClick={() => handleYesFriend(currentMatch)}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 border-green-400/50 bg-gradient-to-br from-green-400/20 to-emerald-400/10 px-6 py-4 text-green-100 font-bold transition hover:from-green-400/30 hover:to-emerald-400/20 hover:border-green-300 shadow-lg shadow-green-400/30 hover:shadow-green-400/50"
+                        whileHover={{ scale: 1.08, rotate: 3, y: -2 }}
+                        whileTap={{ scale: 0.92 }}
+                        animate={{ 
+                          boxShadow: [
+                            "0 10px 25px -5px rgba(34, 197, 94, 0.3)",
+                            "0 15px 35px -5px rgba(34, 197, 94, 0.4)",
+                            "0 10px 25px -5px rgba(34, 197, 94, 0.3)"
+                          ]
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          <Heart className="h-6 w-6 fill-green-400 text-green-400" />
+                        </motion.div>
+                        <span className="text-sm">Yes! Let's Connect 💫</span>
+                      </motion.button>
+                    </div>
+
+                    {/* Match Counter */}
+                    <div className="mt-4 text-center text-xs text-slate-400">
+                      Match {currentMatchIndex + 1} of {potentialMatches.length}
+                    </div>
+                  </motion.div>
+
+                  {/* Navigation */}
+                  {potentialMatches.length > 1 && (
+                    <div className="flex justify-center gap-4 mt-6">
+                      <motion.button
+                        onClick={() => setCurrentMatchIndex(Math.max(0, currentMatchIndex - 1))}
+                        disabled={currentMatchIndex === 0}
+                        className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:border-cyan-300 hover:text-white transition"
+                        whileHover={{ scale: currentMatchIndex === 0 ? 1 : 1.02 }}
+                        whileTap={{ scale: currentMatchIndex === 0 ? 1 : 0.98 }}
+                      >
+                        Previous
+                      </motion.button>
+                      <motion.button
+                        onClick={() => setCurrentMatchIndex(Math.min(potentialMatches.length - 1, currentMatchIndex + 1))}
+                        disabled={currentMatchIndex === potentialMatches.length - 1}
+                        className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:border-cyan-300 hover:text-white transition"
+                        whileHover={{ scale: currentMatchIndex === potentialMatches.length - 1 ? 1 : 1.02 }}
+                        whileTap={{ scale: currentMatchIndex === potentialMatches.length - 1 ? 1 : 0.98 }}
+                      >
+                        Next
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Events Section */}
+          {activeTab === 'events' && (
+            <div>
+              <div className="mb-8">
+                <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">
+                  Nearby Events
+                </h2>
+                <p className="mt-2 text-slate-300">Discover and join events happening around you</p>
+              </div>
 
           {loading ? (
             <div className="text-center py-12">
@@ -487,6 +762,8 @@ const HomePage = () => {
                   </div>
                 </motion.div>
               ))}
+            </div>
+          )}
             </div>
           )}
         </main>

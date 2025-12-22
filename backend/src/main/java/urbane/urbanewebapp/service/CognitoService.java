@@ -6,6 +6,7 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
+import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -83,6 +84,14 @@ public class CognitoService {
     }
 
     public InitiateAuthResponse initiateAuth(String email, String password) {
+        // Validate configuration
+        if (clientId == null || clientId.isEmpty()) {
+            throw new IllegalStateException("Cognito Client ID is not configured. Please set cognito.clientId or COGNITO_CLIENT_ID environment variable.");
+        }
+        if (userPoolId == null || userPoolId.isEmpty()) {
+            throw new IllegalStateException("Cognito User Pool ID is not configured. Please set cognito.userPoolId or COGNITO_USER_POOL_ID environment variable.");
+        }
+        
         CognitoIdentityProviderClient cognitoClient = getCognitoClient();
         
         try {
@@ -97,6 +106,23 @@ public class CognitoService {
                     .build();
 
             return cognitoClient.initiateAuth(authRequest);
+        } catch (InvalidParameterException e) {
+            // More specific error handling for validation errors
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("validation") || errorMsg.contains("InvalidParameter"))) {
+                throw new IllegalStateException(
+                    "Cognito authentication failed: The app client may not have USER_PASSWORD_AUTH enabled, " +
+                    "or the clientId/userPoolId may be incorrect. " +
+                    "Please check your Cognito User Pool App Client settings in AWS Console. " +
+                    "Error: " + errorMsg, e);
+            }
+            throw e;
+        } catch (SdkClientException e) {
+            // Handle AWS SDK client errors (e.g., missing credentials, network issues)
+            String errorMsg = e.getMessage();
+            throw new IllegalStateException(
+                "Cognito client error: " + errorMsg + 
+                ". Please check your AWS credentials and Cognito configuration.", e);
         } finally {
             cognitoClient.close();
         }

@@ -179,6 +179,7 @@ const OnboardingPage = () => {
       age: userAge,
       photo: photo.trim() || null,
       location: null, // Can be added later if needed
+      bio: bio.trim() || null,
     }
 
     // Store extended profile data in localStorage (for future backend support)

@@ -19,6 +19,7 @@ export interface BackendProfile {
   age?: number | null
   photo?: string | null
   location?: BackendLocation | null
+  bio?: string | null
 }
 
 // Backend Location model
@@ -64,6 +65,7 @@ export interface ProfileRequest {
   age?: number | null
   photo?: string | null
   location?: BackendLocation | null
+  bio?: string | null
 }
 
 // Extended profile data stored in localStorage (not yet in backend)
@@ -515,6 +517,82 @@ export const interestApi = {
       body: JSON.stringify(interestNames),
     })
     return handleResponse<BackendUser>(response)
+  },
+}
+
+// Matchmaking types
+export interface PotentialMatch {
+  userId: number
+  email: string
+  profile: BackendProfile
+  interests: BackendInterest[]
+  similarities: string[]
+}
+
+export interface UserProfile {
+  userId: number
+  email: string
+  profile: BackendProfile
+  interests: BackendInterest[]
+}
+
+// Matchmaking API functions
+export const matchmakingApi = {
+  // Get potential matches for a user
+  getPotentialMatches: async (userId: number): Promise<PotentialMatch[]> => {
+    const response = await fetch(`${API_BASE_URL}/matchmaking/potential-matches/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<PotentialMatch[]>(response)
+  },
+
+  // Get detailed user profile
+  getUserProfile: async (userId: number): Promise<UserProfile> => {
+    const response = await fetch(`${API_BASE_URL}/matchmaking/user-profile/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<UserProfile>(response)
+  },
+
+  // Send friend request (Yes)
+  sendFriendRequest: async (requesterId: number, receiverId: number): Promise<{ message: string; status: string }> => {
+    const response = await fetch(`${API_BASE_URL}/matchmaking/send-friend-request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requesterId, receiverId }),
+    })
+    return handleResponse<{ message: string; status: string }>(response)
+  },
+
+  // Reject friend request or skip user (No)
+  rejectFriendRequest: async (requesterId: number, receiverId: number): Promise<{ message: string; status: string }> => {
+    const response = await fetch(`${API_BASE_URL}/matchmaking/reject-friend-request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requesterId, receiverId }),
+    })
+    return handleResponse<{ message: string; status: string }>(response)
+  },
+
+  // Get all friends for a user
+  getFriends: async (userId: number): Promise<UserProfile[]> => {
+    const response = await fetch(`${API_BASE_URL}/matchmaking/friends/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return handleResponse<UserProfile[]>(response)
   },
 }
 

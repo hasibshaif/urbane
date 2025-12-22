@@ -2,7 +2,6 @@ package urbane.urbanewebapp.model;
 
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -45,6 +44,7 @@ public class Profile {
     private Long age;
     private String photo;
 
-
+    @Column(name = "bio", length = 500)
+    private String bio;
 
 }

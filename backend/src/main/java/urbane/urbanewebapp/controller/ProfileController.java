@@ -42,6 +42,7 @@ public class ProfileController {
             existingProfile.setAge(profile.getAge());
             existingProfile.setLocation(profile.getLocation());
             existingProfile.setPhoto(profile.getPhoto());
+            existingProfile.setBio(profile.getBio());
             profileRepository.save(existingProfile);
         }
         return ResponseEntity.ok(existingProfile);
@@ -77,6 +78,7 @@ public class ProfileController {
                 existingProfile.setPhoto(profile.getPhoto());
                 existingProfile.setLocation(profile.getLocation());
                 existingProfile.setPhoneNumber(profile.getPhoneNumber());
+                existingProfile.setBio(profile.getBio());
                 Profile savedProfile = profileRepository.save(existingProfile);
                 return ResponseEntity.ok(savedProfile);
             } else {
