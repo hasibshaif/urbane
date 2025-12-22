@@ -4,11 +4,11 @@ version = 0.1
 stack_name = "UrbaneWebApp"
 resolve_s3 = true
 s3_prefix = "UrbaneWebApp"
-region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 disable_rollback = true
 image_repositories = []
+parameter_overrides = "DatabaseUsername=\"urbane_admin\" DatabaseName=\"urbane\""
 
 [default.global.parameters]
 region = "us-east-1"

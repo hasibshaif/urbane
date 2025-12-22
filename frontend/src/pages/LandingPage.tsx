@@ -30,8 +30,7 @@ const LandingPage = () => {
       <div className="relative z-10 mx-auto min-h-screen max-w-[1080px] px-4 pb-20 pt-8 sm:px-8">
         <header className="flex items-center justify-between">
           <Link to="/discover" className="inline-flex items-center gap-3 text-sm font-semibold text-cyan-200">
-            <img src="/images/logos/urbane-logo.png" alt="Urbane" className="h-24 w-24 object-contain" />
-            Urbane
+            <img src="/images/logos/urbane-logo.png" alt="Urbane" className="h-36 w-36 object-contain" />
           </Link>
           <div className="flex items-center gap-3">
             <Link

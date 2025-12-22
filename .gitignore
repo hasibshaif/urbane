@@ -2,6 +2,7 @@
 TESTING_GUIDE.md
 QUICK_START.md
 COGNITO_SETUP.md
+COGNITO_TROUBLESHOOTING.md
 
 # Scripts
 test-connection.sh

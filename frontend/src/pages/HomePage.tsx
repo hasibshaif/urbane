@@ -367,9 +367,8 @@ const HomePage = () => {
         {/* Header */}
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/images/logos/urbane-logo.png" alt="Urbane" className="h-16 w-16 object-contain" />
+            <img src="/images/logos/urbane-logo.png" alt="Urbane" className="h-36 w-36 object-contain" />
             <div>
-              <h1 className="font-display text-xl font-semibold text-white">Urbane</h1>
               <p className="text-sm text-slate-400">
                 Welcome back, {user.firstName || user.email}
               </p>
